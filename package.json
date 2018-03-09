@@ -1,0 +1,38 @@
+{
+  "name": "ssb-threads",
+  "version": "1.0.0",
+  "description": "Scuttlebot plugin for fetching messages as threads",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ssbc/ssb-threads.git"
+  },
+  "types": "types.ts",
+  "main": "lib/index.js",
+  "author": "staltz.com",
+  "license": "MIT",
+  "keywords": [
+    "ssb"
+  ],
+  "dependencies": {
+    "pull-cat": "^1.1.11",
+    "pull-stream": "^3.6.2",
+    "quick-lru": "^1.1.0",
+    "ssb-ref": "^2.9.1",
+    "ssb-sort": "^1.0.0",
+    "ssb-typescript": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^9.4.6",
+    "ts-node": "^4.1.0",
+    "typescript": "^2.6.2",
+    "scuttle-testbot": "1.1.4",
+    "pull-async": "1.0.0",
+    "ssb-keys": "7.0.14",
+    "tape": "4.9.0"
+  },
+  "scripts": {
+    "compile": "tsc",
+    "pretest": "npm run compile",
+    "test": "tape test.js"
+  }
+}
