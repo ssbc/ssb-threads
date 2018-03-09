@@ -1,16 +1,20 @@
 import { Msg, MsgId } from 'ssb-typescript';
-import {
-  Opts,
-  ThreadData,
-  ProcessingOpts,
-  UniqueRootsOpts,
-  ProfileOpts,
-} from './types';
+import { Opts, ThreadData, ProfileOpts } from './types';
 const pull = require('pull-stream');
 const cat = require('pull-cat');
 const sort = require('ssb-sort');
 const ssbRef = require('ssb-ref');
 const QuickLRU = require('quick-lru');
+
+type UniqueRootsOpts = {
+  lt: number;
+  ssb: any;
+  windowSize: number;
+};
+
+type ProcessingOpts = UniqueRootsOpts & {
+  recencyMap: Map<MsgId, number>;
+};
 
 function getRootMsgId(msg: Msg<any>): MsgId | undefined {
   if (msg && msg.value && msg.value.content) {

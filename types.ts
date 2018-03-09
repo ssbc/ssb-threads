@@ -16,13 +16,3 @@ export type Opts = {
 export type ProfileOpts = Opts & {
   id: string;
 };
-
-export type UniqueRootsOpts = {
-  lt: number;
-  ssb: any;
-  windowSize: number;
-};
-
-export type ProcessingOpts = UniqueRootsOpts & {
-  recencyMap: Map<MsgId, number>;
-};
