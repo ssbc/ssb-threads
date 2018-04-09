@@ -197,7 +197,7 @@ function init(ssb: any, config: any) {
 
 export = {
   name: 'threads',
-  version: '1.0.0',
+  version: '1.1.0',
   manifest: {
     public: 'source',
     profile: 'source',
