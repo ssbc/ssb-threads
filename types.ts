@@ -13,6 +13,11 @@ export type Opts = {
   blacklist?: Array<string>;
 };
 
+export type ThreadOpts = {
+  root: MsgId;
+  threadMaxSize?: number;
+};
+
 export type ProfileOpts = Opts & {
   id: string;
 };

@@ -1,5 +1,5 @@
 import { Msg, MsgId } from 'ssb-typescript';
-import { Opts, ThreadData, ProfileOpts } from './types';
+import { Opts, ThreadData, ProfileOpts, ThreadOpts } from './types';
 const pull = require('pull-stream');
 const cat = require('pull-cat');
 const sort = require('ssb-sort');
@@ -176,6 +176,22 @@ function init(ssb: any, config: any) {
         pull.asyncMap(rootToThread(ssb, threadMaxSize)),
       );
     },
+
+    thread: function _thread(opts: ThreadOpts) {
+      const threadMaxSize = opts.threadMaxSize || Infinity;
+      const rootToMsg = (val: Msg['value']): Msg => ({
+        key: opts.root,
+        value: val,
+        timestamp: val.timestamp,
+      });
+
+      return pull(
+        pull.values([opts.root]),
+        pull.asyncMap(ssb.get.bind(ssb)),
+        pull.map(rootToMsg),
+        pull.asyncMap(rootToThread(ssb, threadMaxSize)),
+      );
+    },
   };
 }
 
@@ -185,9 +201,12 @@ export = {
   manifest: {
     public: 'source',
     profile: 'source',
+    thread: 'source',
   },
   permissions: {
-    master: { allow: ['public', 'profile'] },
+    master: {
+      allow: ['public', 'profile', 'thread'],
+    },
   },
   init,
 };

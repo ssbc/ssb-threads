@@ -6,7 +6,7 @@ var CreateTestSbot = require('scuttle-testbot').use(require('./lib/index'));
 
 var lucyKeys = ssbKeys.generate();
 
-test('gives a simple well-formed thread', function(t) {
+test('threads.public gives a simple well-formed thread', function(t) {
   var myTestSbot = CreateTestSbot({ name: 'test1', keys: lucyKeys });
 
   var lucy = myTestSbot.createFeed(lucyKeys);
@@ -48,7 +48,7 @@ test('gives a simple well-formed thread', function(t) {
   );
 });
 
-test('respects threadMaxSize opt', function(t) {
+test('threads.public respects threadMaxSize opt', function(t) {
   var myTestSbot = CreateTestSbot({ name: 'test2', keys: lucyKeys });
 
   var lucy = myTestSbot.createFeed(lucyKeys);
@@ -87,7 +87,7 @@ test('respects threadMaxSize opt', function(t) {
   );
 });
 
-test('respects whitelist opt', function(t) {
+test('threads.public respects whitelist opt', function(t) {
   var myTestSbot = CreateTestSbot({ name: 'test3', keys: lucyKeys });
 
   var lucy = myTestSbot.createFeed(lucyKeys);
@@ -130,7 +130,7 @@ test('respects whitelist opt', function(t) {
   );
 });
 
-test('respects blacklist opt', function(t) {
+test('threads.public respects blacklist opt', function(t) {
   var myTestSbot = CreateTestSbot({ name: 'test4', keys: lucyKeys });
 
   var lucy = myTestSbot.createFeed(lucyKeys);
@@ -175,18 +175,16 @@ test('respects blacklist opt', function(t) {
   );
 });
 
-test('gives multiple threads', function(t) {
+test('threads.public gives multiple threads', function(t) {
   var myTestSbot = CreateTestSbot({ name: 'test5', keys: lucyKeys });
 
   var lucy = myTestSbot.createFeed(lucyKeys);
 
-  let rootAkey;
   pull(
     pullAsync(cb => {
       lucy.add({ type: 'post', text: 'A: root' }, cb);
     }),
     pull.asyncMap((rootMsg, cb) => {
-      rootAkey = rootMsg;
       lucy.add({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, cb);
     }),
     pull.asyncMap((prevMsg, cb) => {
@@ -219,7 +217,7 @@ test('gives multiple threads', function(t) {
   );
 });
 
-test('sorts threads by recency', function(t) {
+test('threads.public sorts threads by recency', function(t) {
   var myTestSbot = CreateTestSbot({ name: 'test5', keys: lucyKeys });
 
   var lucy = myTestSbot.createFeed(lucyKeys);
@@ -230,7 +228,7 @@ test('sorts threads by recency', function(t) {
       lucy.add({ type: 'post', text: 'A: root' }, cb);
     }),
     pull.asyncMap((rootMsg, cb) => {
-      rootAkey = rootMsg;
+      rootAkey = rootMsg.key;
       lucy.add({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, cb);
     }),
     pull.asyncMap((_, cb) => {
@@ -240,7 +238,7 @@ test('sorts threads by recency', function(t) {
       lucy.add({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, cb);
     }),
     pull.asyncMap((_, cb) => {
-      lucy.add({ type: 'post', text: 'A: 3rd', root: rootAkey.key }, cb);
+      lucy.add({ type: 'post', text: 'A: 3rd', root: rootAkey }, cb);
     }),
 
     pull.map(prevMsg => myTestSbot.threads.public({ reverse: true })),
@@ -256,6 +254,43 @@ test('sorts threads by recency', function(t) {
       t.equals(b.full, true, '2nd thread comes back full');
       t.equals(b.messages.length, 2, '2nd thread has 2 messages');
       t.equals(b.messages[0].value.content.text, 'B: root', '2nd thread is B');
+      myTestSbot.close();
+      t.end();
+    }),
+  );
+});
+
+test('threads.thread gives one full thread', function(t) {
+  var myTestSbot = CreateTestSbot({ name: 'test6', keys: lucyKeys });
+
+  var lucy = myTestSbot.createFeed(lucyKeys);
+
+  let rootAkey;
+  pull(
+    pullAsync(cb => {
+      lucy.add({ type: 'post', text: 'A: root' }, cb);
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      rootAkey = rootMsg.key;
+      lucy.add({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, cb);
+    }),
+    pull.asyncMap((prevMsg, cb) => {
+      var rootKey = prevMsg.value.content.root;
+      lucy.add({ type: 'post', text: 'A: 3rd', root: rootKey }, cb);
+    }),
+
+    pull.map(prevMsg => myTestSbot.threads.thread({ root: rootAkey })),
+    pull.flatten(),
+
+    pull.collect((err, threads) => {
+      t.error(err, 'no error');
+      t.equals(threads.length, 1, 'one thread');
+      const thread = threads[0];
+      t.equals(thread.full, true, 'thread comes back full');
+      t.equals(thread.messages.length, 3, 'thread has 3 messages');
+      t.equals(thread.messages[0].value.content.text, 'A: root', 'root msg ok');
+      t.equals(thread.messages[1].value.content.text, 'A: 2nd', '2nd msg ok');
+      t.equals(thread.messages[2].value.content.text, 'A: 3rd', '3rd msg ok');
       myTestSbot.close();
       t.end();
     }),
