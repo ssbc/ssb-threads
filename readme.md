@@ -65,6 +65,13 @@ Returns a pull stream that emits thread objects of public messages initiated by 
 * `opts.whitelist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blacklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
 
+### `sbot.threads.thread(opts)`
+
+Returns a pull stream that emits one thread object of messages under the root identified by `opts.root` (MsgId).
+
+* `opts.root`: a MsgId that identifies the root of the thread.
+* `opts.threadMaxSize`: optional number (default: Infinity). Dictates the maximum amount of messages in each returned thread object. Serves for previewing threads, particularly long ones.
+
 ## Install
 
 ```
