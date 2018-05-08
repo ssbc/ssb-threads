@@ -6,13 +6,9 @@ const sort = require('ssb-sort');
 const ssbRef = require('ssb-ref');
 const QuickLRU = require('quick-lru');
 
-type UniqueRootsOpts = {
+type ProcessingOpts = {
   lt: number;
   ssb: any;
-  windowSize: number;
-};
-
-type ProcessingOpts = UniqueRootsOpts & {
   recencyMap: Map<MsgId, number>;
 };
 
@@ -105,13 +101,11 @@ function processNextMsg(readMsg: any, opts: ProcessingOpts, cb: any) {
   });
 }
 
-function uniqueRoots(opts: UniqueRootsOpts) {
+function uniqueRoots(opts: ProcessingOpts) {
   return function inputReader(readInput: any) {
-    const recencyMap = new QuickLRU({ maxSize: opts.windowSize });
-    const processingOpts = { ...opts, recencyMap };
     return function outputReadable(abort: any, cb: any) {
       if (abort) return cb(abort);
-      processNextMsg(readInput, processingOpts, cb);
+      processNextMsg(readInput, opts, cb);
     };
   };
 }
@@ -139,6 +133,8 @@ function makeBlacklistFilter(list: Array<string> | undefined) {
 }
 
 function init(ssb: any, config: any) {
+  const recencyMap = new QuickLRU({ maxSize: 200 });
+
   return {
     public: function _public(opts: Opts) {
       const lt = opts.lt || Infinity;
@@ -149,7 +145,7 @@ function init(ssb: any, config: any) {
 
       return pull(
         ssb.createFeedStream({ ...opts, limit: undefined, live: false }),
-        uniqueRoots({ ssb, windowSize: 200, lt }),
+        uniqueRoots({ ssb, recencyMap, lt }),
         pull.filter(isPublic),
         pull.filter(passesWhitelist),
         pull.filter(passesBlacklist),
@@ -168,7 +164,7 @@ function init(ssb: any, config: any) {
 
       return pull(
         ssb.createUserStream({ ...opts, limit: undefined, live: false, id }),
-        uniqueRoots({ ssb, windowSize: 200, lt }),
+        uniqueRoots({ ssb, recencyMap, lt }),
         pull.filter(isPublic),
         pull.filter(passesWhitelist),
         pull.filter(passesBlacklist),
