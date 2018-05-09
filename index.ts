@@ -103,9 +103,10 @@ function processNextMsg(readMsg: any, opts: ProcessingOpts, cb: any) {
 
 function uniqueRoots(opts: ProcessingOpts) {
   return function inputReader(readInput: any) {
+    const processingOpts = { ...opts };
     return function outputReadable(abort: any, cb: any) {
       if (abort) return cb(abort);
-      processNextMsg(readInput, opts, cb);
+      processNextMsg(readInput, processingOpts, cb);
     };
   };
 }
