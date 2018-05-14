@@ -1,5 +1,11 @@
 import { Msg, MsgId } from 'ssb-typescript';
-import { Opts, ThreadData, ProfileOpts, ThreadOpts } from './types';
+import {
+  Opts,
+  ThreadData,
+  ProfileOpts,
+  ThreadOpts,
+  UpdatesOpts,
+} from './types';
 const FlumeViewLevel = require('flumeview-level');
 const pull = require('pull-stream');
 const cat = require('pull-cat');
@@ -218,6 +224,26 @@ function init(ssb: any, config: any) {
       );
     },
 
+    publicUpdates: function _publicUpdates(opts: UpdatesOpts) {
+      const lt = opts.lt || MAX_INT;
+      const passesWhitelist = makeWhitelistFilter(opts.whitelist);
+      const passesBlacklist = makeBlacklistFilter(opts.blacklist);
+
+      return pull(
+        ssb.createFeedStream({
+          lt: opts.lt,
+          limit: opts.limit,
+          reverse: false,
+          old: false,
+          live: true,
+        }),
+        pull.filter(isPublic),
+        pull.filter(passesWhitelist),
+        pull.filter(passesBlacklist),
+        pull.map((msg: Msg) => msg.key),
+      );
+    },
+
     profile: function _profile(opts: ProfileOpts) {
       const id = opts.id;
       const lt = opts.lt || MAX_INT;
@@ -260,6 +286,7 @@ export = {
   version: '1.1.0',
   manifest: {
     public: 'source',
+    publicUpdates: 'source',
     profile: 'source',
     thread: 'source',
   },

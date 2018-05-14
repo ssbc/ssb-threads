@@ -15,6 +15,13 @@ export type Opts = {
   blacklist?: Array<string>;
 };
 
+export type UpdatesOpts = {
+  lt?: number;
+  limit?: number;
+  whitelist?: Array<string>;
+  blacklist?: Array<string>;
+};
+
 export type ThreadOpts = {
   root: MsgId;
   threadMaxSize?: number;

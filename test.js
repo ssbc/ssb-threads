@@ -260,8 +260,59 @@ test('threads.public sorts threads by recency', function(t) {
   );
 });
 
-test('threads.thread gives one full thread', function(t) {
+test('threads.publicUpdates notifies of new thread or new msg', function(t) {
   var myTestSbot = CreateTestSbot({ name: 'test6', keys: lucyKeys });
+
+  var lucy = myTestSbot.createFeed(lucyKeys);
+
+  let rootAkey;
+  let updates = 0;
+
+  pull(
+    myTestSbot.threads.publicUpdates({}),
+    pull.drain(x => {
+      updates++;
+    }),
+  );
+
+  function wait(cb) {
+    return (err, data) => {
+      setTimeout(() => cb(err, data), 100);
+    };
+  }
+
+  pull(
+    pullAsync(cb => {
+      lucy.add({ type: 'post', text: 'A: root' }, wait(cb));
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      t.equals(updates, 1);
+      rootAkey = rootMsg.key;
+      lucy.add({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, wait(cb));
+    }),
+    pull.asyncMap((_, cb) => {
+      t.equals(updates, 2);
+      lucy.add({ type: 'post', text: 'B: root' }, wait(cb));
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      t.equals(updates, 3);
+      lucy.add({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, wait(cb));
+    }),
+    pull.asyncMap((_, cb) => {
+      t.equals(updates, 4);
+      lucy.add({ type: 'post', text: 'A: 3rd', root: rootAkey }, wait(cb));
+    }),
+
+    pull.drain(() => {
+      t.equals(updates, 5);
+      myTestSbot.close();
+      t.end();
+    }),
+  );
+});
+
+test('threads.thread gives one full thread', function(t) {
+  var myTestSbot = CreateTestSbot({ name: 'test7', keys: lucyKeys });
 
   var lucy = myTestSbot.createFeed(lucyKeys);
 
