@@ -17,17 +17,17 @@
     "pull-cat": "^1.1.11",
     "pull-stream": "^3.6.2",
     "quick-lru": "^1.1.0",
-    "ssb-ref": "^2.9.1",
-    "ssb-sort": "^1.0.0",
-    "ssb-typescript": "^1.1.0"
+    "ssb-ref": "2.11.x",
+    "ssb-sort": "1.1.x",
+    "ssb-typescript": "1.3.x"
   },
   "devDependencies": {
     "@types/node": "^9.4.6",
     "ts-node": "^4.1.0",
-    "typescript": "^2.6.2",
-    "scuttle-testbot": "1.1.4",
+    "typescript": "^2.8.3",
+    "scuttle-testbot": "1.1.5",
     "pull-async": "1.0.0",
-    "ssb-keys": "7.0.14",
+    "ssb-keys": "7.0.16",
     "tape": "4.9.0"
   },
   "scripts": {
