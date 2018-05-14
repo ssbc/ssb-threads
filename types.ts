@@ -8,6 +8,8 @@ export type ThreadData = {
 export type Opts = {
   lt?: number;
   limit?: number;
+  live?: boolean;
+  reverse?: boolean;
   threadMaxSize?: number;
   whitelist?: Array<string>;
   blacklist?: Array<string>;
