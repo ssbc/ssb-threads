@@ -14,7 +14,8 @@
     "ssb"
   ],
   "dependencies": {
-    "flumeview-level": "3.0.1",
+    "flumeview-level": "3.0.4",
+    "level-packager": "2.1.0",
     "pull-cat": "^1.1.11",
     "pull-stream": "^3.6.2",
     "quick-lru": "^1.1.0",
