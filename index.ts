@@ -214,6 +214,7 @@ function init(ssb: any, config: any) {
           values: false,
           seqs: false,
         }),
+        pull.filter((item: IndexItem) => !!item && !!item[1]),
         pull.filter(isUnique(new Set())),
         pull.asyncMap(materialize(ssb, new QuickLRU({ maxSize: 200 }))),
         pull.filter(isPublic),
