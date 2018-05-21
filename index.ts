@@ -47,6 +47,12 @@ function isPublic(msg: Msg<any>): boolean {
   return !msg.value.content || typeof msg.value.content !== 'string';
 }
 
+function isNotMine(sbot: any) {
+  return function isNotMineGivenSbot(msg: Msg<any>): boolean {
+    return msg && msg.value && msg.value.author !== sbot.id;
+  };
+}
+
 function isUnique(uniqueRoots: Set<MsgId>) {
   return function checkIsUnique(item: IndexItem) {
     const rootKey = item[1];
@@ -238,6 +244,7 @@ function init(ssb: any, config: any) {
           old: false,
           live: true,
         }),
+        pull.filter(isNotMine(ssb)),
         pull.filter(isPublic),
         pull.filter(passesWhitelist),
         pull.filter(passesBlacklist),
