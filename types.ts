@@ -1,6 +1,6 @@
 import { Msg, MsgId } from 'ssb-typescript';
 
-export type ThreadData = {
+export type Thread = {
   messages: Array<Msg>;
   full: boolean;
 };
@@ -16,8 +16,6 @@ export type Opts = {
 };
 
 export type UpdatesOpts = {
-  lt?: number;
-  limit?: number;
   whitelist?: Array<string>;
   blacklist?: Array<string>;
 };

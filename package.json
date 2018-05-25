@@ -15,7 +15,7 @@
   ],
   "dependencies": {
     "flumeview-level": "3.0.4",
-    "encoding-down": "5.0.1",
+    "encoding-down": "5.0.2",
     "pull-cat": "^1.1.11",
     "pull-stream": "^3.6.2",
     "quick-lru": "^1.1.0",

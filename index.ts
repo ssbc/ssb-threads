@@ -1,36 +1,13 @@
 import { Msg, MsgId } from 'ssb-typescript';
-import {
-  Opts,
-  ThreadData,
-  ProfileOpts,
-  ThreadOpts,
-  UpdatesOpts,
-} from './types';
-const FlumeViewLevel = require('flumeview-level');
+import { Opts, Thread, ProfileOpts, ThreadOpts, UpdatesOpts } from './types';
 const pull = require('pull-stream');
 const cat = require('pull-cat');
+const FlumeViewLevel = require('flumeview-level');
 const sort = require('ssb-sort');
 const ssbRef = require('ssb-ref');
 const QuickLRU = require('quick-lru');
 
-type ProcessingOpts = {
-  lt: number;
-  ssb: any;
-  recencyMap: Map<MsgId, number>;
-};
-
-const MAX_INT = 0x1fffffffffffff;
-
-type IndexItem<T = any> = [number, MsgId];
-
-function buildIndex(ssb: any) {
-  return ssb._flumeUse(
-    'ssb-threads',
-    FlumeViewLevel(1, (msg: Msg, seq: number) => [
-      [getTimestamp(msg), getRootMsgId(msg) || msg.key],
-    ]),
-  );
-}
+type IndexItem<T = any> = [string, number, MsgId];
 
 function getTimestamp(msg: Msg<any>): number {
   return msg.value.timestamp;
@@ -43,6 +20,40 @@ function getRootMsgId(msg: Msg<any>): MsgId | undefined {
   }
 }
 
+function buildPublicIndex(ssb: any) {
+  return ssb._flumeUse(
+    'threads-public',
+    FlumeViewLevel(1, (msg: Msg, seq: number) => [
+      ['any', getTimestamp(msg), getRootMsgId(msg) || msg.key],
+    ]),
+  );
+}
+
+function buildProfilesIndex(ssb: any) {
+  return ssb._flumeUse(
+    'threads-profiles',
+    FlumeViewLevel(1, (msg: Msg, seq: number) => [
+      [msg.value.author, getTimestamp(msg), getRootMsgId(msg) || msg.key],
+    ]),
+  );
+}
+
+function isValidIndexItem(item: any) {
+  return !!item && !!item[2];
+}
+
+function isUnique(uniqueRoots: Set<MsgId>) {
+  return function checkIsUnique(item: IndexItem) {
+    const rootKey = item[2];
+    if (uniqueRoots.has(rootKey)) {
+      return false;
+    } else {
+      uniqueRoots.add(rootKey);
+      return true;
+    }
+  };
+}
+
 function isPublic(msg: Msg<any>): boolean {
   return !msg.value.content || typeof msg.value.content !== 'string';
 }
@@ -53,21 +64,9 @@ function isNotMine(sbot: any) {
   };
 }
 
-function isUnique(uniqueRoots: Set<MsgId>) {
-  return function checkIsUnique(item: IndexItem) {
-    const rootKey = item[1];
-    if (uniqueRoots.has(rootKey)) {
-      return false;
-    } else {
-      uniqueRoots.add(rootKey);
-      return true;
-    }
-  };
-}
-
 function materialize(sbot: any, cache: Map<MsgId, Msg<any>>) {
   function sbotGetWithCache(item: IndexItem, cb: (e: any, msg?: Msg) => void) {
-    const [timestamp, key] = item;
+    const [authorId, timestamp, key] = item;
     if (cache.has(key)) {
       cb(null, cache.get(key) as Msg);
     } else {
@@ -81,99 +80,10 @@ function materialize(sbot: any, cache: Map<MsgId, Msg<any>>) {
   }
 
   return function fetchMsg(item: IndexItem, cb: (err: any, msg?: Msg) => void) {
-    const key: MsgId = item[1];
     sbotGetWithCache(item, (err, msg) => {
       if (err) return cb(err);
       cb(null, msg);
     });
-  };
-}
-
-function rootToThread(sbot: any, threadMaxSize: number) {
-  return (root: Msg, cb: (err: any, thread?: ThreadData) => void) => {
-    pull(
-      cat([
-        pull.values([root]),
-        sbot.links({
-          rel: 'root',
-          dest: root.key,
-          limit: threadMaxSize,
-          reverse: true,
-          live: false,
-          keys: true,
-          values: true,
-        }),
-      ]),
-      pull.take(threadMaxSize + 1),
-      pull.collect((err2: any, arr: Array<Msg>) => {
-        if (err2) return cb(err2);
-        const full = arr.length <= threadMaxSize;
-        sort(arr);
-        if (arr.length > threadMaxSize && arr.length >= 3) arr.splice(1, 1);
-        cb(null, { messages: arr, full });
-      }),
-    );
-  };
-}
-
-function processNextMsg(readMsg: any, opts: ProcessingOpts, cb: any) {
-  const { ssb, recencyMap } = opts;
-  readMsg(null, (end: any, msg: Msg) => {
-    // Gate for errors or aborts
-    if (end === true) {
-      cb(true);
-      return;
-    } else if (end) {
-      cb(end);
-      return;
-    }
-
-    const rootMsgId: MsgId = getRootMsgId(msg) || msg.key;
-    const isRoot = msg.key === rootMsgId;
-
-    // Update recency
-    const alreadyProcessedRoot = recencyMap.has(rootMsgId);
-    let recency = recencyMap.get(rootMsgId);
-    if (!recency || msg.value.timestamp > recency) {
-      recency = msg.value.timestamp;
-      recencyMap.set(rootMsgId, recency);
-    }
-
-    // Gate against repeating roots
-    if (alreadyProcessedRoot) {
-      processNextMsg(readMsg, opts, cb);
-      return;
-    }
-
-    // Gate against invalid recencies
-    if (recency > opts.lt) {
-      processNextMsg(readMsg, opts, cb);
-      return;
-    }
-
-    // Add root
-    if (isRoot) {
-      cb(null, msg);
-    } else {
-      ssb.get(rootMsgId, (err1: any, value: Msg['value']) => {
-        if (err1) {
-          processNextMsg(readMsg, opts, cb);
-          return;
-        }
-        const rootMsg = { key: rootMsgId, value, timestamp: 0 };
-        cb(null, rootMsg);
-      });
-    }
-  });
-}
-
-function uniqueRoots(opts: ProcessingOpts) {
-  return function inputReader(readInput: any) {
-    const processingOpts = { ...opts };
-    return function outputReadable(abort: any, cb: any) {
-      if (abort) return cb(abort);
-      processNextMsg(readInput, processingOpts, cb);
-    };
   };
 }
 
@@ -199,28 +109,55 @@ function makeBlacklistFilter(list: Array<string> | undefined) {
     );
 }
 
+function rootToThread(sbot: any, threadMaxSize: number) {
+  return (root: Msg, cb: (err: any, thread?: Thread) => void) => {
+    pull(
+      cat([
+        pull.values([root]),
+        sbot.links({
+          rel: 'root',
+          dest: root.key,
+          limit: threadMaxSize,
+          reverse: true,
+          live: false,
+          keys: true,
+          values: true,
+        }),
+      ]),
+      pull.take(threadMaxSize + 1),
+      pull.collect((err2: any, arr: Array<Msg>) => {
+        if (err2) return cb(err2);
+        const full = arr.length <= threadMaxSize;
+        sort(arr);
+        if (arr.length > threadMaxSize && arr.length >= 3) arr.splice(1, 1);
+        cb(null, { messages: arr, full });
+      }),
+    );
+  };
+}
+
 function init(ssb: any, config: any) {
-  const index = buildIndex(ssb);
-  const recencyMap = new QuickLRU({ maxSize: 200 });
+  const publicIndex = buildPublicIndex(ssb);
+  const profilesIndex = buildProfilesIndex(ssb);
 
   return {
     public: function _public(opts: Opts) {
-      const lt = opts.lt || MAX_INT;
+      const lt = opts.lt;
       const maxThreads = opts.limit || Infinity;
       const threadMaxSize = opts.threadMaxSize || Infinity;
       const passesWhitelist = makeWhitelistFilter(opts.whitelist);
       const passesBlacklist = makeBlacklistFilter(opts.blacklist);
 
       return pull(
-        index.read({
-          lt: [lt],
+        publicIndex.read({
+          lt: ['any', lt, undefined],
           reverse: opts.reverse || true,
           live: opts.live || false,
           keys: true,
           values: false,
           seqs: false,
         }),
-        pull.filter((item: IndexItem) => !!item && !!item[1]),
+        pull.filter(isValidIndexItem),
         pull.filter(isUnique(new Set())),
         pull.asyncMap(materialize(ssb, new QuickLRU({ maxSize: 200 }))),
         pull.filter(isPublic),
@@ -232,18 +169,11 @@ function init(ssb: any, config: any) {
     },
 
     publicUpdates: function _publicUpdates(opts: UpdatesOpts) {
-      const lt = opts.lt || MAX_INT;
       const passesWhitelist = makeWhitelistFilter(opts.whitelist);
       const passesBlacklist = makeBlacklistFilter(opts.blacklist);
 
       return pull(
-        ssb.createFeedStream({
-          lt: opts.lt,
-          limit: opts.limit,
-          reverse: false,
-          old: false,
-          live: true,
-        }),
+        ssb.createFeedStream({ reverse: false, old: false, live: true }),
         pull.filter(isNotMine(ssb)),
         pull.filter(isPublic),
         pull.filter(passesWhitelist),
@@ -254,15 +184,24 @@ function init(ssb: any, config: any) {
 
     profile: function _profile(opts: ProfileOpts) {
       const id = opts.id;
-      const lt = opts.lt || MAX_INT;
+      const lt = opts.lt;
       const maxThreads = opts.limit || Infinity;
       const threadMaxSize = opts.threadMaxSize || Infinity;
       const passesWhitelist = makeWhitelistFilter(opts.whitelist);
       const passesBlacklist = makeBlacklistFilter(opts.blacklist);
 
       return pull(
-        ssb.createUserStream({ ...opts, limit: undefined, live: false, id }),
-        uniqueRoots({ ssb, recencyMap, lt }),
+        profilesIndex.read({
+          lt: [id, lt, undefined],
+          reverse: opts.reverse || true,
+          live: opts.live || false,
+          keys: true,
+          values: false,
+          seqs: false,
+        }),
+        pull.filter(isValidIndexItem),
+        pull.filter(isUnique(new Set())),
+        pull.asyncMap(materialize(ssb, new QuickLRU({ maxSize: 200 }))),
         pull.filter(isPublic),
         pull.filter(passesWhitelist),
         pull.filter(passesBlacklist),
