@@ -53,6 +53,13 @@ Returns a pull stream that emits thread objects of public messages.
 * `opts.whitelist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blacklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
 
+### `sbot.threads.publicUpdates(opts)`
+
+Returns a ("live") pull stream that emits a message key (strings) for every new message that passes the (optional) whitelist or blacklist.
+
+* `opts.whitelist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
+* `opts.blacklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
+
 ### `sbot.threads.profile(opts)`
 
 Returns a pull stream that emits thread objects of public messages initiated by a certain profile `id`.
