@@ -5,20 +5,20 @@ export type Thread = {
   full: boolean;
 };
 
+export type FilterOpts = {
+  whitelist?: Array<string>;
+  blacklist?: Array<string>;
+};
+
 export type Opts = {
   lt?: number;
   limit?: number;
   live?: boolean;
   reverse?: boolean;
   threadMaxSize?: number;
-  whitelist?: Array<string>;
-  blacklist?: Array<string>;
-};
+} & FilterOpts;
 
-export type UpdatesOpts = {
-  whitelist?: Array<string>;
-  blacklist?: Array<string>;
-};
+export type UpdatesOpts = {} & FilterOpts;
 
 export type ThreadOpts = {
   root: MsgId;

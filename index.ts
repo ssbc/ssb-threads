@@ -1,5 +1,12 @@
 import { Msg, MsgId } from 'ssb-typescript';
-import { Opts, Thread, ProfileOpts, ThreadOpts, UpdatesOpts } from './types';
+import {
+  Opts,
+  Thread,
+  ProfileOpts,
+  ThreadOpts,
+  UpdatesOpts,
+  FilterOpts,
+} from './types';
 const pull = require('pull-stream');
 const cat = require('pull-cat');
 const FlumeViewLevel = require('flumeview-level');
@@ -7,6 +14,7 @@ const sort = require('ssb-sort');
 const ssbRef = require('ssb-ref');
 const QuickLRU = require('quick-lru');
 
+type Filter = (msg: Msg) => boolean;
 type IndexItem<T = any> = [string, number, MsgId];
 
 function getTimestamp(msg: Msg<any>): number {
@@ -90,23 +98,29 @@ function materialize(sbot: any, cache: Map<MsgId, Msg<any>>) {
 function makeWhitelistFilter(list: Array<string> | undefined) {
   return (msg: Msg) =>
     !list ||
-    (msg &&
+    ((msg &&
       msg.value &&
       msg.value.content &&
       msg.value.content.type &&
-      list.indexOf(msg.value.content.type) > -1);
+      list.indexOf(msg.value.content.type) > -1) as boolean);
 }
 
 function makeBlacklistFilter(list: Array<string> | undefined) {
   return (msg: Msg) =>
     !list ||
-    !(
+    (!(
       msg &&
       msg.value &&
       msg.value.content &&
       msg.value.content.type &&
       list.indexOf(msg.value.content.type) > -1
-    );
+    ) as boolean);
+}
+
+function makeFilter(opts: FilterOpts): (msg: Msg) => boolean {
+  const passesWhitelist = makeWhitelistFilter(opts.whitelist);
+  const passesBlacklist = makeBlacklistFilter(opts.blacklist);
+  return (m: Msg) => passesWhitelist(m) && passesBlacklist(m);
 }
 
 function rootToThread(sbot: any, threadMaxSize: number) {
@@ -143,16 +157,17 @@ function init(ssb: any, config: any) {
   return {
     public: function _public(opts: Opts) {
       const lt = opts.lt;
+      const reverse = opts.reverse === false ? false : true;
+      const live = opts.live === true ? true : false;
       const maxThreads = opts.limit || Infinity;
       const threadMaxSize = opts.threadMaxSize || Infinity;
-      const passesWhitelist = makeWhitelistFilter(opts.whitelist);
-      const passesBlacklist = makeBlacklistFilter(opts.blacklist);
+      const filter = makeFilter(opts);
 
       return pull(
         publicIndex.read({
           lt: ['any', lt, undefined],
-          reverse: opts.reverse || true,
-          live: opts.live || false,
+          reverse,
+          live,
           keys: true,
           values: false,
           seqs: false,
@@ -161,23 +176,20 @@ function init(ssb: any, config: any) {
         pull.filter(isUnique(new Set())),
         pull.asyncMap(materialize(ssb, new QuickLRU({ maxSize: 200 }))),
         pull.filter(isPublic),
-        pull.filter(passesWhitelist),
-        pull.filter(passesBlacklist),
+        pull.filter(filter),
         pull.take(maxThreads),
         pull.asyncMap(rootToThread(ssb, threadMaxSize)),
       );
     },
 
     publicUpdates: function _publicUpdates(opts: UpdatesOpts) {
-      const passesWhitelist = makeWhitelistFilter(opts.whitelist);
-      const passesBlacklist = makeBlacklistFilter(opts.blacklist);
+      const filter = makeFilter(opts);
 
       return pull(
         ssb.createFeedStream({ reverse: false, old: false, live: true }),
         pull.filter(isNotMine(ssb)),
         pull.filter(isPublic),
-        pull.filter(passesWhitelist),
-        pull.filter(passesBlacklist),
+        pull.filter(filter),
         pull.map((msg: Msg) => msg.key),
       );
     },
@@ -187,8 +199,7 @@ function init(ssb: any, config: any) {
       const lt = opts.lt;
       const maxThreads = opts.limit || Infinity;
       const threadMaxSize = opts.threadMaxSize || Infinity;
-      const passesWhitelist = makeWhitelistFilter(opts.whitelist);
-      const passesBlacklist = makeBlacklistFilter(opts.blacklist);
+      const filter = makeFilter(opts);
 
       return pull(
         profilesIndex.read({
@@ -203,8 +214,7 @@ function init(ssb: any, config: any) {
         pull.filter(isUnique(new Set())),
         pull.asyncMap(materialize(ssb, new QuickLRU({ maxSize: 200 }))),
         pull.filter(isPublic),
-        pull.filter(passesWhitelist),
-        pull.filter(passesBlacklist),
+        pull.filter(filter),
         pull.take(maxThreads),
         pull.asyncMap(rootToThread(ssb, threadMaxSize)),
       );
