@@ -201,6 +201,8 @@ function init(ssb: any, config: any) {
     profile: function _profile(opts: ProfileOpts) {
       const id = opts.id;
       const lt = opts.lt;
+      const reverse = opts.reverse === false ? false : true;
+      const live = opts.live === true ? true : false;
       const maxThreads = opts.limit || Infinity;
       const threadMaxSize = opts.threadMaxSize || Infinity;
       const filter = makeFilter(opts);
@@ -208,8 +210,9 @@ function init(ssb: any, config: any) {
       return pull(
         profilesIndex.read({
           lt: [id, lt, undefined],
-          reverse: opts.reverse || true,
-          live: opts.live || false,
+          gt: [id, null, undefined],
+          reverse,
+          live,
           keys: true,
           values: false,
           seqs: false,
