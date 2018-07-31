@@ -123,20 +123,21 @@ function makeFilter(opts: FilterOpts): (msg: Msg) => boolean {
   return (m: Msg) => passesWhitelist(m) && passesBlacklist(m);
 }
 
-function rootToThread(sbot: any, threadMaxSize: number) {
+function rootToThread(sbot: any, threadMaxSize: number, filter: Filter) {
   return (root: Msg, cb: (err: any, thread?: Thread) => void) => {
     pull(
       cat([
         pull.values([root]),
-        sbot.links({
-          rel: 'root',
-          dest: root.key,
-          limit: threadMaxSize,
-          reverse: true,
-          live: false,
-          keys: true,
-          values: true,
-        }),
+        pull(
+          sbot.backlinks.read({
+            query: [{ $filter: { dest: root.key } }],
+            index: 'DTA',
+            live: false,
+            reverse: true,
+          }),
+          pull.filter(filter),
+          pull.take(threadMaxSize),
+        ),
       ]),
       pull.take(threadMaxSize + 1),
       pull.collect((err2: any, arr: Array<Msg>) => {
@@ -151,6 +152,9 @@ function rootToThread(sbot: any, threadMaxSize: number) {
 }
 
 function init(ssb: any, config: any) {
+  if (!ssb.backlinks || !ssb.backlinks.read) {
+    throw new Error('"ssb-threads" is missing required plugin "ssb-backlinks"');
+  }
   const publicIndex = buildPublicIndex(ssb);
   const profilesIndex = buildProfilesIndex(ssb);
 
@@ -178,7 +182,7 @@ function init(ssb: any, config: any) {
         pull.filter(isPublic),
         pull.filter(filter),
         pull.take(maxThreads),
-        pull.asyncMap(rootToThread(ssb, threadMaxSize)),
+        pull.asyncMap(rootToThread(ssb, threadMaxSize, filter)),
       );
     },
 
@@ -216,7 +220,7 @@ function init(ssb: any, config: any) {
         pull.filter(isPublic),
         pull.filter(filter),
         pull.take(maxThreads),
-        pull.asyncMap(rootToThread(ssb, threadMaxSize)),
+        pull.asyncMap(rootToThread(ssb, threadMaxSize, filter)),
       );
     },
 
@@ -227,12 +231,13 @@ function init(ssb: any, config: any) {
         value: val,
         timestamp: val.timestamp,
       });
+      const filterPosts = makeWhitelistFilter(['post']);
 
       return pull(
         pull.values([opts.root]),
         pull.asyncMap(ssb.get.bind(ssb)),
         pull.map(rootToMsg),
-        pull.asyncMap(rootToThread(ssb, threadMaxSize)),
+        pull.asyncMap(rootToThread(ssb, threadMaxSize, filterPosts)),
       );
     },
   };

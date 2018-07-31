@@ -4,6 +4,8 @@
 
 ## Usage
 
+Requires the backlinks plugin.
+
 ```diff
  const createSbot = require('scuttlebot/index')
    .use(require('scuttlebot/plugins/plugins'))
@@ -12,7 +14,7 @@
    .use(require('scuttlebot/plugins/replicate'))
    .use(require('ssb-friends'))
    .use(require('ssb-blobs'))
-   .use(require('ssb-backlinks'))
++  .use(require('ssb-backlinks'))
    .use(require('ssb-private'))
    .use(require('ssb-about'))
    .use(require('ssb-contacts'))

@@ -2,7 +2,9 @@ var test = require('tape');
 var pull = require('pull-stream');
 var ssbKeys = require('ssb-keys');
 var pullAsync = require('pull-async');
-var CreateTestSbot = require('scuttle-testbot').use(require('./lib/index'));
+var CreateTestSbot = require('scuttle-testbot')
+  .use(require('ssb-backlinks'))
+  .use(require('./lib/index'));
 
 var lucyKeys = ssbKeys.generate();
 
