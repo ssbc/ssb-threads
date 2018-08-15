@@ -18,7 +18,9 @@ type Filter = (msg: Msg) => boolean;
 type IndexItem<T = any> = [string, number, MsgId];
 
 function getTimestamp(msg: Msg<any>): number {
-  return msg.value.timestamp;
+  const arrivalTimestamp = msg.timestamp;
+  const declaredTimestamp = msg.value.timestamp;
+  return Math.min(arrivalTimestamp, declaredTimestamp);
 }
 
 function getRootMsgId(msg: Msg<any>): MsgId | undefined {
@@ -31,7 +33,7 @@ function getRootMsgId(msg: Msg<any>): MsgId | undefined {
 function buildPublicIndex(ssb: any) {
   return ssb._flumeUse(
     'threads-public',
-    FlumeViewLevel(1, (msg: Msg, seq: number) => [
+    FlumeViewLevel(2, (msg: Msg, seq: number) => [
       ['any', getTimestamp(msg), getRootMsgId(msg) || msg.key],
     ]),
   );
@@ -40,7 +42,7 @@ function buildPublicIndex(ssb: any) {
 function buildProfilesIndex(ssb: any) {
   return ssb._flumeUse(
     'threads-profiles',
-    FlumeViewLevel(1, (msg: Msg, seq: number) => [
+    FlumeViewLevel(2, (msg: Msg, seq: number) => [
       [msg.value.author, getTimestamp(msg), getRootMsgId(msg) || msg.key],
     ]),
   );
