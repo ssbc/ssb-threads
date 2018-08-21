@@ -15,7 +15,7 @@ const ssbRef = require('ssb-ref');
 const QuickLRU = require('quick-lru');
 
 type Filter = (msg: Msg) => boolean;
-type IndexItem<T = any> = [string, number, MsgId];
+type IndexItem = [string, number, MsgId];
 
 function getTimestamp(msg: Msg<any>): number {
   const arrivalTimestamp = msg.timestamp;
@@ -89,9 +89,12 @@ function materialize(sbot: any, cache: Map<MsgId, Msg<any>>) {
     }
   }
 
-  return function fetchMsg(item: IndexItem, cb: (err: any, msg?: Msg) => void) {
+  return function fetchMsg(
+    item: IndexItem,
+    cb: (err: any, msg?: Msg | false) => void,
+  ) {
     sbotGetWithCache(item, (err, msg) => {
-      if (err) return cb(err);
+      if (err) return cb(null, false);
       cb(null, msg);
     });
   };
@@ -181,6 +184,7 @@ function init(ssb: any, config: any) {
         pull.filter(isValidIndexItem),
         pull.filter(isUnique(new Set())),
         pull.asyncMap(materialize(ssb, new QuickLRU({ maxSize: 200 }))),
+        pull.filter((x: Msg | false) => x !== false),
         pull.filter(isPublic),
         pull.filter(filter),
         pull.take(maxThreads),
@@ -222,6 +226,7 @@ function init(ssb: any, config: any) {
         pull.filter(isValidIndexItem),
         pull.filter(isUnique(new Set())),
         pull.asyncMap(materialize(ssb, new QuickLRU({ maxSize: 200 }))),
+        pull.filter((x: Msg | false) => x !== false),
         pull.filter(isPublic),
         pull.filter(filter),
         pull.take(maxThreads),
