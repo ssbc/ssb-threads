@@ -52,15 +52,15 @@ Returns a pull stream that emits thread objects of public messages.
 * `opts.limit`: optional number (default: Infinity). Dictates the maximum amount of
   threads this pull stream will return
 * `opts.threadMaxSize`: optional number (default: Infinity). Dictates the maximum amount of messages in each returned thread object. Serves for previewing threads, particularly long ones.
-* `opts.whitelist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
-* `opts.blacklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
+* `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
+* `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
 
 ### `sbot.threads.publicUpdates(opts)`
 
-Returns a ("live") pull stream that emits a message key (strings) for every new message that passes the (optional) whitelist or blacklist.
+Returns a ("live") pull stream that emits a message key (strings) for every new message that passes the (optional) allowlist or blocklist.
 
-* `opts.whitelist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
-* `opts.blacklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
+* `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
+* `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
 
 ### `sbot.threads.profile(opts)`
 
@@ -71,8 +71,8 @@ Returns a pull stream that emits thread objects of public messages initiated by 
 * `opts.limit`: optional number (default: Infinity). Dictates the maximum amount of
   threads this pull stream will return
 * `opts.threadMaxSize`: optional number (default: Infinity). Dictates the maximum amount of messages in each returned thread object. Serves for previewing threads, particularly long ones.
-* `opts.whitelist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
-* `opts.blacklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
+* `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
+* `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
 
 ### `sbot.threads.thread(opts)`
 

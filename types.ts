@@ -6,8 +6,8 @@ export type Thread = {
 };
 
 export type FilterOpts = {
-  whitelist?: Array<string>;
-  blacklist?: Array<string>;
+  allowlist?: Array<string>;
+  blocklist?: Array<string>;
 };
 
 export type Opts = {

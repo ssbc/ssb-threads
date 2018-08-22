@@ -89,7 +89,7 @@ test('threads.public respects threadMaxSize opt', function(t) {
   );
 });
 
-test('threads.public respects whitelist opt', function(t) {
+test('threads.public respects allowlist opt', function(t) {
   var myTestSbot = CreateTestSbot({ name: 'test3', keys: lucyKeys });
 
   var lucy = myTestSbot.createFeed(lucyKeys);
@@ -114,7 +114,7 @@ test('threads.public respects whitelist opt', function(t) {
     pull.asyncMap((prevMsg, cb) => {
       lucy.add({ type: 'shout', text: 'AAAHHH' }, cb);
     }),
-    pull.map(prevMsg => myTestSbot.threads.public({ whitelist: ['shout'] })),
+    pull.map(prevMsg => myTestSbot.threads.public({ allowlist: ['shout'] })),
     pull.flatten(),
 
     pull.collect((err, threads) => {
@@ -132,7 +132,7 @@ test('threads.public respects whitelist opt', function(t) {
   );
 });
 
-test('threads.public respects blacklist opt', function(t) {
+test('threads.public respects blocklist opt', function(t) {
   var myTestSbot = CreateTestSbot({ name: 'test4', keys: lucyKeys });
 
   var lucy = myTestSbot.createFeed(lucyKeys);
@@ -158,7 +158,7 @@ test('threads.public respects blacklist opt', function(t) {
       lucy.add({ type: 'shout', text: 'AAAHHH' }, cb);
     }),
     pull.map(prevMsg =>
-      myTestSbot.threads.public({ blacklist: ['shout', 'vote'] }),
+      myTestSbot.threads.public({ blocklist: ['shout', 'vote'] }),
     ),
     pull.flatten(),
 

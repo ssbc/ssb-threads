@@ -109,7 +109,7 @@ function hasRoot(rootKey: MsgId) {
     msg.value.content.root === rootKey;
 }
 
-function makeWhitelistFilter(list: Array<string> | undefined) {
+function makeAllowFilter(list: Array<string> | undefined) {
   return (msg: Msg) =>
     !list ||
     ((msg &&
@@ -119,7 +119,7 @@ function makeWhitelistFilter(list: Array<string> | undefined) {
       list.indexOf(msg.value.content.type) > -1) as boolean);
 }
 
-function makeBlacklistFilter(list: Array<string> | undefined) {
+function makeBlockFilter(list: Array<string> | undefined) {
   return (msg: Msg) =>
     !list ||
     (!(
@@ -132,9 +132,9 @@ function makeBlacklistFilter(list: Array<string> | undefined) {
 }
 
 function makeFilter(opts: FilterOpts): (msg: Msg) => boolean {
-  const passesWhitelist = makeWhitelistFilter(opts.whitelist);
-  const passesBlacklist = makeBlacklistFilter(opts.blacklist);
-  return (m: Msg) => passesWhitelist(m) && passesBlacklist(m);
+  const passesAllowList = makeAllowFilter(opts.allowlist);
+  const passesBlockList = makeBlockFilter(opts.blocklist);
+  return (m: Msg) => passesAllowList(m) && passesBlockList(m);
 }
 
 function rootToThread(sbot: any, threadMaxSize: number, filter: Filter) {
@@ -251,7 +251,7 @@ function init(ssb: any, config: any) {
         value: val,
         timestamp: val.timestamp,
       });
-      const filterPosts = makeWhitelistFilter(['post']);
+      const filterPosts = makeAllowFilter(['post']);
 
       return pull(
         pull.values([opts.root]),
