@@ -100,6 +100,15 @@ function materialize(sbot: any, cache: Map<MsgId, Msg<any>>) {
   };
 }
 
+function hasRoot(rootKey: MsgId) {
+  return (msg: Msg<{ root?: MsgId }>) =>
+    msg &&
+    msg.value &&
+    msg.value.content &&
+    msg.value.content.root &&
+    msg.value.content.root === rootKey;
+}
+
 function makeWhitelistFilter(list: Array<string> | undefined) {
   return (msg: Msg) =>
     !list ||
@@ -140,6 +149,7 @@ function rootToThread(sbot: any, threadMaxSize: number, filter: Filter) {
             live: false,
             reverse: true,
           }),
+          pull.filter(hasRoot(root.key)),
           pull.filter(filter),
           pull.take(threadMaxSize),
         ),
