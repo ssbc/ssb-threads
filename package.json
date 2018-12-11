@@ -14,12 +14,12 @@
     "ssb"
   ],
   "dependencies": {
-    "flumeview-level": "3.0.4",
-    "encoding-down": "5.0.2",
+    "flumeview-level": "~3.0.4",
+    "encoding-down": "~5.0.2",
     "pull-cat": "^1.1.11",
     "pull-stream": "^3.6.2",
     "quick-lru": "^1.1.0",
-    "ssb-ref": "2.11.x",
+    "ssb-ref": "^2.13.0",
     "ssb-sort": "1.1.x",
     "ssb-typescript": "1.3.x"
   },
