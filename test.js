@@ -3,7 +3,9 @@ var pull = require('pull-stream');
 var ssbKeys = require('ssb-keys');
 var pullAsync = require('pull-async');
 var CreateTestSbot = require('scuttle-testbot')
+  .use(require('scuttlebot/plugins/replicate')) // required by ssb-friends
   .use(require('ssb-backlinks'))
+  .use(require('ssb-friends'))
   .use(require('./lib/index'));
 
 var lucyKeys = ssbKeys.generate();

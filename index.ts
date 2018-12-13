@@ -131,6 +131,24 @@ function makeBlockFilter(list: Array<string> | undefined) {
     ) as boolean);
 }
 
+function removeMessagesFromBlocked(sbot: any) {
+  return (inputPullStream: any) =>
+    pull(
+      inputPullStream,
+      pull.asyncMap((msg: Msg, cb: (e: any, done?: Msg | null) => void) => {
+        sbot.friends.isBlocking(
+          { source: sbot.id, dest: msg.value.author },
+          (err: any, blocking: boolean) => {
+            if (err) cb(err);
+            else if (blocking) cb(null, null);
+            else cb(null, msg);
+          },
+        );
+      }),
+      pull.filter(),
+    );
+}
+
 function makeFilter(opts: FilterOpts): (msg: Msg) => boolean {
   const passesAllowList = makeAllowFilter(opts.allowlist);
   const passesBlockList = makeBlockFilter(opts.blocklist);
@@ -150,6 +168,7 @@ function rootToThread(sbot: any, threadMaxSize: number, filter: Filter) {
             reverse: true,
           }),
           pull.filter(hasRoot(root.key)),
+          removeMessagesFromBlocked(sbot),
           pull.filter(filter),
           pull.take(threadMaxSize),
         ),
@@ -166,12 +185,15 @@ function rootToThread(sbot: any, threadMaxSize: number, filter: Filter) {
   };
 }
 
-function init(ssb: any, config: any) {
-  if (!ssb.backlinks || !ssb.backlinks.read) {
+function init(sbot: any, config: any) {
+  if (!sbot.backlinks || !sbot.backlinks.read) {
     throw new Error('"ssb-threads" is missing required plugin "ssb-backlinks"');
   }
-  const publicIndex = buildPublicIndex(ssb);
-  const profilesIndex = buildProfilesIndex(ssb);
+  if (!sbot.friends || !sbot.friends.isBlocking) {
+    throw new Error('"ssb-threads" is missing required plugin "ssb-friends@3"');
+  }
+  const publicIndex = buildPublicIndex(sbot);
+  const profilesIndex = buildProfilesIndex(sbot);
 
   return {
     public: function _public(opts: Opts) {
@@ -193,12 +215,13 @@ function init(ssb: any, config: any) {
         }),
         pull.filter(isValidIndexItem),
         pull.filter(isUnique(new Set())),
-        pull.asyncMap(materialize(ssb, new QuickLRU({ maxSize: 200 }))),
+        pull.asyncMap(materialize(sbot, new QuickLRU({ maxSize: 200 }))),
         pull.filter((x: Msg | false) => x !== false),
         pull.filter(isPublic),
+        removeMessagesFromBlocked(sbot),
         pull.filter(filter),
         pull.take(maxThreads),
-        pull.asyncMap(rootToThread(ssb, threadMaxSize, filter)),
+        pull.asyncMap(rootToThread(sbot, threadMaxSize, filter)),
       );
     },
 
@@ -206,8 +229,8 @@ function init(ssb: any, config: any) {
       const filter = makeFilter(opts);
 
       return pull(
-        ssb.createFeedStream({ reverse: false, old: false, live: true }),
-        pull.filter(isNotMine(ssb)),
+        sbot.createFeedStream({ reverse: false, old: false, live: true }),
+        pull.filter(isNotMine(sbot)),
         pull.filter(isPublic),
         pull.filter(filter),
         pull.map((msg: Msg) => msg.key),
@@ -235,12 +258,13 @@ function init(ssb: any, config: any) {
         }),
         pull.filter(isValidIndexItem),
         pull.filter(isUnique(new Set())),
-        pull.asyncMap(materialize(ssb, new QuickLRU({ maxSize: 200 }))),
+        pull.asyncMap(materialize(sbot, new QuickLRU({ maxSize: 200 }))),
         pull.filter((x: Msg | false) => x !== false),
         pull.filter(isPublic),
+        removeMessagesFromBlocked(sbot),
         pull.filter(filter),
         pull.take(maxThreads),
-        pull.asyncMap(rootToThread(ssb, threadMaxSize, filter)),
+        pull.asyncMap(rootToThread(sbot, threadMaxSize, filter)),
       );
     },
 
@@ -255,9 +279,10 @@ function init(ssb: any, config: any) {
 
       return pull(
         pull.values([opts.root]),
-        pull.asyncMap(ssb.get.bind(ssb)),
+        pull.asyncMap(sbot.get.bind(sbot)),
         pull.map(rootToMsg),
-        pull.asyncMap(rootToThread(ssb, threadMaxSize, filterPosts)),
+        removeMessagesFromBlocked(sbot),
+        pull.asyncMap(rootToThread(sbot, threadMaxSize, filterPosts)),
       );
     },
   };
