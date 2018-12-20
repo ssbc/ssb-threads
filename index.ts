@@ -232,6 +232,7 @@ function init(sbot: any, config: any) {
         sbot.createFeedStream({ reverse: false, old: false, live: true }),
         pull.filter(isNotMine(sbot)),
         pull.filter(isPublic),
+        removeMessagesFromBlocked(sbot),
         pull.filter(filter),
         pull.map((msg: Msg) => msg.key),
       );
