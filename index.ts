@@ -191,7 +191,7 @@ function rootToThread(sbot: any, maxSize: number, filter: Filter) {
       { source: sbot.id, dest: root.value.author },
       (err: any, blocking: boolean) => {
         if (err) cb(err);
-        else if (blocking) cb(null, { messages: [], full: true });
+        else if (blocking) cb(new Error('Author Blocked:' + root.value.author));
         else nonBlockedRootToThread(sbot, maxSize, filter)(root, cb);
       },
     );
