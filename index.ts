@@ -155,7 +155,7 @@ function makeFilter(opts: FilterOpts): (msg: Msg) => boolean {
   return (m: Msg) => passesAllowList(m) && passesBlockList(m);
 }
 
-function rootToThread(sbot: any, threadMaxSize: number, filter: Filter) {
+function nonBlockedRootToThread(sbot: any, maxSize: number, filter: Filter) {
   return (root: Msg, cb: (err: any, thread?: Thread) => void) => {
     pull(
       cat([
@@ -170,17 +170,30 @@ function rootToThread(sbot: any, threadMaxSize: number, filter: Filter) {
           pull.filter(hasRoot(root.key)),
           removeMessagesFromBlocked(sbot),
           pull.filter(filter),
-          pull.take(threadMaxSize),
+          pull.take(maxSize),
         ),
       ]),
-      pull.take(threadMaxSize + 1),
+      pull.take(maxSize + 1),
       pull.collect((err2: any, arr: Array<Msg>) => {
         if (err2) return cb(err2);
-        const full = arr.length <= threadMaxSize;
+        const full = arr.length <= maxSize;
         sort(arr);
-        if (arr.length > threadMaxSize && arr.length >= 3) arr.splice(1, 1);
+        if (arr.length > maxSize && arr.length >= 3) arr.splice(1, 1);
         cb(null, { messages: arr, full });
       }),
+    );
+  };
+}
+
+function rootToThread(sbot: any, maxSize: number, filter: Filter) {
+  return (root: Msg, cb: (err: any, thread?: Thread) => void) => {
+    sbot.friends.isBlocking(
+      { source: sbot.id, dest: root.value.author },
+      (err: any, blocking: boolean) => {
+        if (err) cb(err);
+        else if (blocking) cb(null, { messages: [], full: true });
+        else nonBlockedRootToThread(sbot, maxSize, filter)(root, cb);
+      },
     );
   };
 }
@@ -221,7 +234,7 @@ function init(sbot: any, _config: any) {
         removeMessagesFromBlocked(sbot),
         pull.filter(filter),
         pull.take(maxThreads),
-        pull.asyncMap(rootToThread(sbot, threadMaxSize, filter)),
+        pull.asyncMap(nonBlockedRootToThread(sbot, threadMaxSize, filter)),
       );
     },
 
@@ -265,7 +278,7 @@ function init(sbot: any, _config: any) {
         removeMessagesFromBlocked(sbot),
         pull.filter(filter),
         pull.take(maxThreads),
-        pull.asyncMap(rootToThread(sbot, threadMaxSize, filter)),
+        pull.asyncMap(nonBlockedRootToThread(sbot, threadMaxSize, filter)),
       );
     },
 
@@ -282,7 +295,6 @@ function init(sbot: any, _config: any) {
         pull.values([opts.root]),
         pull.asyncMap(sbot.get.bind(sbot)),
         pull.map(rootToMsg),
-        removeMessagesFromBlocked(sbot),
         pull.asyncMap(rootToThread(sbot, threadMaxSize, filterPosts)),
       );
     },
