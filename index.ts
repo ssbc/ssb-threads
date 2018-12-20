@@ -33,7 +33,7 @@ function getRootMsgId(msg: Msg<any>): MsgId | undefined {
 function buildPublicIndex(ssb: any) {
   return ssb._flumeUse(
     'threads-public',
-    FlumeViewLevel(2, (msg: Msg, seq: number) => [
+    FlumeViewLevel(2, (msg: Msg, _seq: number) => [
       ['any', getTimestamp(msg), getRootMsgId(msg) || msg.key],
     ]),
   );
@@ -42,7 +42,7 @@ function buildPublicIndex(ssb: any) {
 function buildProfilesIndex(ssb: any) {
   return ssb._flumeUse(
     'threads-profiles',
-    FlumeViewLevel(2, (msg: Msg, seq: number) => [
+    FlumeViewLevel(2, (msg: Msg, _seq: number) => [
       [msg.value.author, getTimestamp(msg), getRootMsgId(msg) || msg.key],
     ]),
   );
@@ -76,7 +76,7 @@ function isNotMine(sbot: any) {
 
 function materialize(sbot: any, cache: Map<MsgId, Msg<any>>) {
   function sbotGetWithCache(item: IndexItem, cb: (e: any, msg?: Msg) => void) {
-    const [authorId, timestamp, key] = item;
+    const [, timestamp, key] = item;
     if (cache.has(key)) {
       cb(null, cache.get(key) as Msg);
     } else {
@@ -185,7 +185,7 @@ function rootToThread(sbot: any, threadMaxSize: number, filter: Filter) {
   };
 }
 
-function init(sbot: any, config: any) {
+function init(sbot: any, _config: any) {
   if (!sbot.backlinks || !sbot.backlinks.read) {
     throw new Error('"ssb-threads" is missing required plugin "ssb-backlinks"');
   }
