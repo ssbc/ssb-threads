@@ -101,12 +101,12 @@ function materialize(sbot: any, cache: Map<MsgId, Msg<any>>) {
 }
 
 function hasRoot(rootKey: MsgId) {
-  return (msg: Msg<{ root?: MsgId }>) =>
-    msg &&
-    msg.value &&
-    msg.value.content &&
-    msg.value.content.root &&
-    msg.value.content.root === rootKey;
+  return (kv: { key: IndexItem; value: Msg }) =>
+    kv &&
+    kv.key &&
+    kv.key[2] === rootKey &&
+    kv.value &&
+    kv.value.key !== rootKey;
 }
 
 function makeAllowFilter(list: Array<string> | undefined) {
@@ -155,19 +155,27 @@ function makeFilter(opts: FilterOpts): (msg: Msg) => boolean {
   return (m: Msg) => passesAllowList(m) && passesBlockList(m);
 }
 
-function nonBlockedRootToThread(sbot: any, maxSize: number, filter: Filter) {
+function nonBlockedRootToThread(
+  sbot: any,
+  publicIndex: any,
+  maxSize: number,
+  filter: Filter,
+) {
   return (root: Msg, cb: (err: any, thread?: Thread) => void) => {
     pull(
       cat([
         pull.values([root]),
         pull(
-          sbot.backlinks.read({
-            query: [{ $filter: { dest: root.key } }],
-            index: 'DTA',
-            live: false,
+          publicIndex.read({
+            lt: ['any', undefined, undefined],
             reverse: true,
+            live: false,
+            keys: true,
+            values: true,
+            seqs: false,
           }),
           pull.filter(hasRoot(root.key)),
+          pull.map((kv: { key: IndexItem; value: Msg }) => kv.value),
           removeMessagesFromBlocked(sbot),
           pull.filter(filter),
           pull.take(maxSize),
@@ -185,23 +193,26 @@ function nonBlockedRootToThread(sbot: any, maxSize: number, filter: Filter) {
   };
 }
 
-function rootToThread(sbot: any, maxSize: number, filter: Filter) {
+function rootToThread(
+  sbot: any,
+  publicIndex: any,
+  maxSize: number,
+  filter: Filter,
+) {
   return (root: Msg, cb: (err: any, thread?: Thread) => void) => {
     sbot.friends.isBlocking(
       { source: sbot.id, dest: root.value.author },
       (err: any, blocking: boolean) => {
         if (err) cb(err);
         else if (blocking) cb(new Error('Author Blocked:' + root.value.author));
-        else nonBlockedRootToThread(sbot, maxSize, filter)(root, cb);
+        else
+          nonBlockedRootToThread(sbot, publicIndex, maxSize, filter)(root, cb);
       },
     );
   };
 }
 
 function init(sbot: any, _config: any) {
-  if (!sbot.backlinks || !sbot.backlinks.read) {
-    throw new Error('"ssb-threads" is missing required plugin "ssb-backlinks"');
-  }
   if (!sbot.friends || !sbot.friends.isBlocking) {
     throw new Error('"ssb-threads" is missing required plugin "ssb-friends@3"');
   }
@@ -234,7 +245,9 @@ function init(sbot: any, _config: any) {
         removeMessagesFromBlocked(sbot),
         pull.filter(filter),
         pull.take(maxThreads),
-        pull.asyncMap(nonBlockedRootToThread(sbot, threadMaxSize, filter)),
+        pull.asyncMap(
+          nonBlockedRootToThread(sbot, publicIndex, threadMaxSize, filter),
+        ),
       );
     },
 
@@ -278,7 +291,9 @@ function init(sbot: any, _config: any) {
         removeMessagesFromBlocked(sbot),
         pull.filter(filter),
         pull.take(maxThreads),
-        pull.asyncMap(nonBlockedRootToThread(sbot, threadMaxSize, filter)),
+        pull.asyncMap(
+          nonBlockedRootToThread(sbot, publicIndex, threadMaxSize, filter),
+        ),
       );
     },
 
@@ -295,7 +310,9 @@ function init(sbot: any, _config: any) {
         pull.values([opts.root]),
         pull.asyncMap(sbot.get.bind(sbot)),
         pull.map(rootToMsg),
-        pull.asyncMap(rootToThread(sbot, threadMaxSize, filterPosts)),
+        pull.asyncMap(
+          rootToThread(sbot, publicIndex, threadMaxSize, filterPosts),
+        ),
       );
     },
   };
