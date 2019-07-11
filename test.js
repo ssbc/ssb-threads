@@ -1,19 +1,29 @@
-var test = require('tape');
-var pull = require('pull-stream');
-var ssbKeys = require('ssb-keys');
-var pullAsync = require('pull-async');
-var CreateTestSbot = require('scuttle-testbot')
-  .use(require('scuttlebot/plugins/replicate')) // required by ssb-friends
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const test = require('tape');
+const pull = require('pull-stream');
+const ssbKeys = require('ssb-keys');
+const pullAsync = require('pull-async');
+
+const CreateTestSbot = require('ssb-server/index')
+  .use(require('ssb-replicate')) // required by ssb-friends
   .use(require('ssb-backlinks'))
   .use(require('ssb-friends'))
   .use(require('./lib/index'));
 
-var lucyKeys = ssbKeys.generate();
+const lucyKeys = ssbKeys.generate();
+const maryKeys = ssbKeys.generate();
 
-test('threads.public gives a simple well-formed thread', function(t) {
-  var myTestSbot = CreateTestSbot({ name: 'test1', keys: lucyKeys });
+test('threads.public gives a simple well-formed thread', t => {
+  const myTestSbot = CreateTestSbot({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    temp: true,
+    name: 'test1',
+    keys: lucyKeys,
+  });
 
-  var lucy = myTestSbot.createFeed(lucyKeys);
+  const lucy = myTestSbot.createFeed(lucyKeys);
 
   pull(
     pullAsync(cb => {
@@ -23,10 +33,10 @@ test('threads.public gives a simple well-formed thread', function(t) {
       lucy.add({ type: 'post', text: 'Second message', root: rootMsg.key }, cb);
     }),
     pull.asyncMap((prevMsg, cb) => {
-      var rootKey = prevMsg.value.content.root;
+      const rootKey = prevMsg.value.content.root;
       lucy.add({ type: 'post', text: 'Third message', root: rootKey }, cb);
     }),
-    pull.map(prevMsg => myTestSbot.threads.public({})),
+    pull.map(() => myTestSbot.threads.public({})),
     pull.flatten(),
 
     pull.collect((err, threads) => {
@@ -52,10 +62,15 @@ test('threads.public gives a simple well-formed thread', function(t) {
   );
 });
 
-test('threads.public respects threadMaxSize opt', function(t) {
-  var myTestSbot = CreateTestSbot({ name: 'test2', keys: lucyKeys });
+test('threads.public respects threadMaxSize opt', t => {
+  const myTestSbot = CreateTestSbot({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    temp: true,
+    name: 'test2',
+    keys: lucyKeys,
+  });
 
-  var lucy = myTestSbot.createFeed(lucyKeys);
+  const lucy = myTestSbot.createFeed(lucyKeys);
 
   pull(
     pullAsync(cb => {
@@ -65,10 +80,10 @@ test('threads.public respects threadMaxSize opt', function(t) {
       lucy.add({ type: 'post', text: 'Second message', root: rootMsg.key }, cb);
     }),
     pull.asyncMap((prevMsg, cb) => {
-      var rootKey = prevMsg.value.content.root;
+      const rootKey = prevMsg.value.content.root;
       lucy.add({ type: 'post', text: 'Third message', root: rootKey }, cb);
     }),
-    pull.map(prevMsg => myTestSbot.threads.public({ threadMaxSize: 2 })),
+    pull.map(() => myTestSbot.threads.public({ threadMaxSize: 2 })),
     pull.flatten(),
 
     pull.collect((err, threads) => {
@@ -91,10 +106,15 @@ test('threads.public respects threadMaxSize opt', function(t) {
   );
 });
 
-test('threads.public respects allowlist opt', function(t) {
-  var myTestSbot = CreateTestSbot({ name: 'test3', keys: lucyKeys });
+test('threads.public respects allowlist opt', t => {
+  const myTestSbot = CreateTestSbot({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    temp: true,
+    name: 'test3',
+    keys: lucyKeys,
+  });
 
-  var lucy = myTestSbot.createFeed(lucyKeys);
+  const lucy = myTestSbot.createFeed(lucyKeys);
 
   pull(
     pullAsync(cb => {
@@ -113,10 +133,10 @@ test('threads.public respects allowlist opt', function(t) {
         cb,
       );
     }),
-    pull.asyncMap((prevMsg, cb) => {
+    pull.asyncMap((_prevMsg, cb) => {
       lucy.add({ type: 'shout', text: 'AAAHHH' }, cb);
     }),
-    pull.map(prevMsg => myTestSbot.threads.public({ allowlist: ['shout'] })),
+    pull.map(() => myTestSbot.threads.public({ allowlist: ['shout'] })),
     pull.flatten(),
 
     pull.collect((err, threads) => {
@@ -134,10 +154,15 @@ test('threads.public respects allowlist opt', function(t) {
   );
 });
 
-test('threads.public respects blocklist opt', function(t) {
-  var myTestSbot = CreateTestSbot({ name: 'test4', keys: lucyKeys });
+test('threads.public respects blocklist opt', t => {
+  const myTestSbot = CreateTestSbot({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    temp: true,
+    name: 'test4',
+    keys: lucyKeys,
+  });
 
-  var lucy = myTestSbot.createFeed(lucyKeys);
+  const lucy = myTestSbot.createFeed(lucyKeys);
 
   pull(
     pullAsync(cb => {
@@ -156,12 +181,10 @@ test('threads.public respects blocklist opt', function(t) {
         cb,
       );
     }),
-    pull.asyncMap((prevMsg, cb) => {
+    pull.asyncMap((_prevMsg, cb) => {
       lucy.add({ type: 'shout', text: 'AAAHHH' }, cb);
     }),
-    pull.map(prevMsg =>
-      myTestSbot.threads.public({ blocklist: ['shout', 'vote'] }),
-    ),
+    pull.map(() => myTestSbot.threads.public({ blocklist: ['shout', 'vote'] })),
     pull.flatten(),
 
     pull.collect((err, threads) => {
@@ -179,10 +202,15 @@ test('threads.public respects blocklist opt', function(t) {
   );
 });
 
-test('threads.public gives multiple threads', function(t) {
-  var myTestSbot = CreateTestSbot({ name: 'test5', keys: lucyKeys });
+test('threads.public gives multiple threads', t => {
+  const myTestSbot = CreateTestSbot({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    temp: true,
+    name: 'test5',
+    keys: lucyKeys,
+  });
 
-  var lucy = myTestSbot.createFeed(lucyKeys);
+  const lucy = myTestSbot.createFeed(lucyKeys);
 
   pull(
     pullAsync(cb => {
@@ -192,7 +220,7 @@ test('threads.public gives multiple threads', function(t) {
       lucy.add({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, cb);
     }),
     pull.asyncMap((prevMsg, cb) => {
-      var rootKey = prevMsg.value.content.root;
+      const rootKey = prevMsg.value.content.root;
       lucy.add({ type: 'post', text: 'A: 3rd', root: rootKey }, cb);
     }),
     pull.asyncMap((_, cb) => {
@@ -202,7 +230,7 @@ test('threads.public gives multiple threads', function(t) {
       lucy.add({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, cb);
     }),
 
-    pull.map(prevMsg => myTestSbot.threads.public({ reverse: true })),
+    pull.map(() => myTestSbot.threads.public({ reverse: true })),
     pull.flatten(),
 
     pull.collect((err, threads) => {
@@ -221,10 +249,15 @@ test('threads.public gives multiple threads', function(t) {
   );
 });
 
-test('threads.public sorts threads by recency', function(t) {
-  var myTestSbot = CreateTestSbot({ name: 'test5', keys: lucyKeys });
+test('threads.public sorts threads by recency', t => {
+  const myTestSbot = CreateTestSbot({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    temp: true,
+    name: 'test5',
+    keys: lucyKeys,
+  });
 
-  var lucy = myTestSbot.createFeed(lucyKeys);
+  const lucy = myTestSbot.createFeed(lucyKeys);
 
   let rootAkey;
   pull(
@@ -245,7 +278,7 @@ test('threads.public sorts threads by recency', function(t) {
       lucy.add({ type: 'post', text: 'A: 3rd', root: rootAkey }, cb);
     }),
 
-    pull.map(prevMsg => myTestSbot.threads.public({ reverse: true })),
+    pull.map(() => myTestSbot.threads.public({ reverse: true })),
     pull.flatten(),
 
     pull.collect((err, threads) => {
@@ -264,17 +297,22 @@ test('threads.public sorts threads by recency', function(t) {
   );
 });
 
-test('threads.publicUpdates notifies of new thread or new msg', function(t) {
-  var myTestSbot = CreateTestSbot({ name: 'test6', keys: lucyKeys });
+test('threads.publicUpdates notifies of new thread or new msg', t => {
+  const myTestSbot = CreateTestSbot({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    temp: true,
+    name: 'test6',
+    keys: lucyKeys,
+  });
 
-  var lucy = myTestSbot.createFeed(lucyKeys);
+  const lucy = myTestSbot.createFeed(lucyKeys);
+  const mary = myTestSbot.createFeed(maryKeys);
 
-  let rootAkey;
   let updates = 0;
 
   pull(
     myTestSbot.threads.publicUpdates({}),
-    pull.drain(x => {
+    pull.drain(() => {
       updates++;
     }),
   );
@@ -290,35 +328,35 @@ test('threads.publicUpdates notifies of new thread or new msg', function(t) {
       lucy.add({ type: 'post', text: 'A: root' }, wait(cb));
     }),
     pull.asyncMap((rootMsg, cb) => {
-      t.equals(updates, 1);
-      rootAkey = rootMsg.key;
-      lucy.add({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, wait(cb));
+      t.equals(updates, 0);
+      mary.add({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, wait(cb));
     }),
     pull.asyncMap((_, cb) => {
-      t.equals(updates, 2);
-      lucy.add({ type: 'post', text: 'B: root' }, wait(cb));
+      t.equals(updates, 1);
+      mary.add({ type: 'post', text: 'B: root' }, wait(cb));
     }),
     pull.asyncMap((rootMsg, cb) => {
-      t.equals(updates, 3);
+      t.equals(updates, 2);
       lucy.add({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, wait(cb));
-    }),
-    pull.asyncMap((_, cb) => {
-      t.equals(updates, 4);
-      lucy.add({ type: 'post', text: 'A: 3rd', root: rootAkey }, wait(cb));
     }),
 
     pull.drain(() => {
-      t.equals(updates, 5);
+      t.equals(updates, 2);
       myTestSbot.close();
       t.end();
     }),
   );
 });
 
-test('threads.thread gives one full thread', function(t) {
-  var myTestSbot = CreateTestSbot({ name: 'test7', keys: lucyKeys });
+test('threads.thread gives one full thread', t => {
+  const myTestSbot = CreateTestSbot({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    temp: true,
+    name: 'test7',
+    keys: lucyKeys,
+  });
 
-  var lucy = myTestSbot.createFeed(lucyKeys);
+  const lucy = myTestSbot.createFeed(lucyKeys);
 
   let rootAkey;
   pull(
@@ -330,11 +368,11 @@ test('threads.thread gives one full thread', function(t) {
       lucy.add({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, cb);
     }),
     pull.asyncMap((prevMsg, cb) => {
-      var rootKey = prevMsg.value.content.root;
+      const rootKey = prevMsg.value.content.root;
       lucy.add({ type: 'post', text: 'A: 3rd', root: rootKey }, cb);
     }),
 
-    pull.map(prevMsg => myTestSbot.threads.thread({ root: rootAkey })),
+    pull.map(() => myTestSbot.threads.thread({ root: rootAkey })),
     pull.flatten(),
 
     pull.collect((err, threads) => {
