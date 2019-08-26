@@ -17,6 +17,8 @@ const QuickLRU = require('quick-lru');
 type Filter = (msg: Msg) => boolean;
 type IndexItem = [string, number, MsgId];
 
+let isBlocking = (obj:Object, cb:Function) => { cb(undefined, false) };
+
 function getTimestamp(msg: Msg<any>): number {
   const arrivalTimestamp = msg.timestamp;
   const declaredTimestamp = msg.value.timestamp;
@@ -136,7 +138,7 @@ function removeMessagesFromBlocked(sbot: any) {
     pull(
       inputPullStream,
       pull.asyncMap((msg: Msg, cb: (e: any, done?: Msg | null) => void) => {
-        sbot.friends.isBlocking(
+        isBlocking(
           { source: sbot.id, dest: msg.value.author },
           (err: any, blocking: boolean) => {
             if (err) cb(err);
@@ -187,7 +189,7 @@ function nonBlockedRootToThread(sbot: any, maxSize: number, filter: Filter) {
 
 function rootToThread(sbot: any, maxSize: number, filter: Filter) {
   return (root: Msg, cb: (err: any, thread?: Thread) => void) => {
-    sbot.friends.isBlocking(
+    isBlocking(
       { source: sbot.id, dest: root.value.author },
       (err: any, blocking: boolean) => {
         if (err) cb(err);
@@ -202,8 +204,8 @@ function init(sbot: any, _config: any) {
   if (!sbot.backlinks || !sbot.backlinks.read) {
     throw new Error('"ssb-threads" is missing required plugin "ssb-backlinks"');
   }
-  if (!sbot.friends || !sbot.friends.isBlocking) {
-    throw new Error('"ssb-threads" is missing required plugin "ssb-friends@3"');
+  if (sbot.friends) {
+    isBlocking = sbot.friends.isBlocking;
   }
   const publicIndex = buildPublicIndex(sbot);
   const profilesIndex = buildProfilesIndex(sbot);

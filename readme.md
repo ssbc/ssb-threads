@@ -5,6 +5,7 @@
 ## Usage
 
 Requires the backlinks plugin.
+If the ssb-friends plugin is available it will filter the messages of blocked users.
 
 ```diff
  const createSbot = require('scuttlebot/index')
