@@ -7,9 +7,7 @@ const ssbKeys = require('ssb-keys');
 const pullAsync = require('pull-async');
 
 const CreateTestSbot = require('ssb-server/index')
-  .use(require('ssb-replicate')) // required by ssb-friends
   .use(require('ssb-backlinks'))
-  .use(require('ssb-friends'))
   .use(require('./lib/index'));
 
 const lucyKeys = ssbKeys.generate();
