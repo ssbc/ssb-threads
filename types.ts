@@ -23,7 +23,7 @@ export type UpdatesOpts = {} & FilterOpts;
 export type ThreadOpts = {
   root: MsgId;
   threadMaxSize?: number;
-};
+} & FilterOpts;
 
 export type ProfileOpts = Opts & {
   id: string;

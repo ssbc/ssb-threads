@@ -291,8 +291,9 @@ function init(sbot: any, _config: any) {
         value: val,
         timestamp: val.timestamp,
       });
-      const filterPosts = makeAllowFilter(['post']);
+      if(!opts.allowlist && !opts.blocklist) { opts.allowlist = ['post'] }
 
+      const filterPosts = makeFilter(opts)
       return pull(
         pull.values([opts.root]),
         pull.asyncMap(sbot.get.bind(sbot)),
