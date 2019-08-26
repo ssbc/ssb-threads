@@ -81,6 +81,11 @@ Returns a pull stream that emits one thread object of messages under the root id
 
 * `opts.root`: a MsgId that identifies the root of the thread.
 * `opts.threadMaxSize`: optional number (default: Infinity). Dictates the maximum amount of messages in each returned thread object. Serves for previewing threads, particularly long ones.
+* `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
+* `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
+
+If `opts.allowlist` and `opts.blocklist` are not defined, 
+only messages of type **post** will be returned.
 
 ## Install
 
