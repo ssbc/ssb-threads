@@ -17,7 +17,9 @@ const QuickLRU = require('quick-lru');
 type Filter = (msg: Msg) => boolean;
 type IndexItem = [string, number, MsgId];
 
-let isBlocking = (obj:Object, cb:Function) => { cb(undefined, false) };
+let isBlocking = (obj: any, cb: Function) => {
+  cb(null, false);
+};
 
 function getTimestamp(msg: Msg<any>): number {
   const arrivalTimestamp = msg.timestamp;
@@ -204,7 +206,7 @@ function init(sbot: any, _config: any) {
   if (!sbot.backlinks || !sbot.backlinks.read) {
     throw new Error('"ssb-threads" is missing required plugin "ssb-backlinks"');
   }
-  if (sbot.friends) {
+  if (sbot.friends && sbot.friends.isBlocking) {
     isBlocking = sbot.friends.isBlocking;
   }
   const publicIndex = buildPublicIndex(sbot);
@@ -291,9 +293,11 @@ function init(sbot: any, _config: any) {
         value: val,
         timestamp: val.timestamp,
       });
-      if(!opts.allowlist && !opts.blocklist) { opts.allowlist = ['post'] }
+      if (!opts.allowlist && !opts.blocklist) {
+        opts.allowlist = ['post'];
+      }
+      const filterPosts = makeFilter(opts);
 
-      const filterPosts = makeFilter(opts)
       return pull(
         pull.values([opts.root]),
         pull.asyncMap(sbot.get.bind(sbot)),
