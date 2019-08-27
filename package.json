@@ -1,6 +1,6 @@
 {
   "name": "ssb-threads",
-  "version": "3.5.0",
+  "version": "3.6.0",
   "description": "Scuttlebot plugin for fetching messages as threads",
   "repository": {
     "type": "git",
