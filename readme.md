@@ -18,7 +18,6 @@ If the ssb-friends plugin is available it will filter the messages of blocked us
 +  .use(require('ssb-backlinks'))
    .use(require('ssb-private'))
    .use(require('ssb-about'))
-   .use(require('ssb-contacts'))
    .use(require('ssb-query'))
 +  .use(require('ssb-threads'))
    .use(require('scuttlebot/plugins/invite'))
