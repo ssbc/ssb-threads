@@ -1,4 +1,5 @@
 import { Msg, MsgId } from 'ssb-typescript';
+import QuickLRU = require('quick-lru');
 import {
   Opts,
   Thread,
@@ -12,7 +13,6 @@ const cat = require('pull-cat');
 const FlumeViewLevel = require('flumeview-level');
 const sort = require('ssb-sort');
 const ssbRef = require('ssb-ref');
-const QuickLRU = require('quick-lru');
 
 type Filter = (msg: Msg) => boolean;
 type IndexItem = [string, number, MsgId];
@@ -28,7 +28,7 @@ function getTimestamp(msg: Msg<any>): number {
 }
 
 function getRootMsgId(msg: Msg<any>): MsgId | undefined {
-  if (msg && msg.value && msg.value.content) {
+  if (msg?.value?.content) {
     const root = msg.value.content.root;
     if (ssbRef.isMsgId(root)) return root;
   }
@@ -38,7 +38,7 @@ function buildPublicIndex(ssb: any) {
   return ssb._flumeUse(
     'threads-public',
     FlumeViewLevel(2, (msg: Msg, _seq: number) => [
-      ['any', getTimestamp(msg), getRootMsgId(msg) || msg.key],
+      ['any', getTimestamp(msg), getRootMsgId(msg) ?? msg.key],
     ]),
   );
 }
@@ -47,13 +47,13 @@ function buildProfilesIndex(ssb: any) {
   return ssb._flumeUse(
     'threads-profiles',
     FlumeViewLevel(2, (msg: Msg, _seq: number) => [
-      [msg.value.author, getTimestamp(msg), getRootMsgId(msg) || msg.key],
+      [msg.value.author, getTimestamp(msg), getRootMsgId(msg) ?? msg.key],
     ]),
   );
 }
 
-function isValidIndexItem(item: any) {
-  return !!item && !!item[2];
+function isValidIndexItem(item: Array<any>) {
+  return !!item?.[2];
 }
 
 function isUnique(uniqueRoots: Set<MsgId>) {
@@ -74,11 +74,11 @@ function isPublic(msg: Msg<any>): boolean {
 
 function isNotMine(sbot: any) {
   return function isNotMineGivenSbot(msg: Msg<any>): boolean {
-    return msg && msg.value && msg.value.author !== sbot.id;
+    return msg?.value?.author !== sbot.id;
   };
 }
 
-function materialize(sbot: any, cache: Map<MsgId, Msg<any>>) {
+function materialize(sbot: any, cache: QuickLRU<MsgId, Msg<any>>) {
   function sbotGetWithCache(item: IndexItem, cb: (e: any, msg?: Msg) => void) {
     const [, timestamp, key] = item;
     if (cache.has(key)) {
@@ -105,21 +105,13 @@ function materialize(sbot: any, cache: Map<MsgId, Msg<any>>) {
 }
 
 function hasRoot(rootKey: MsgId) {
-  return (msg: Msg<{ root?: MsgId }>) =>
-    msg &&
-    msg.value &&
-    msg.value.content &&
-    msg.value.content.root &&
-    msg.value.content.root === rootKey;
+  return (msg: Msg<{ root?: MsgId }>) => msg?.value?.content?.root === rootKey;
 }
 
 function makeAllowFilter(list: Array<string> | undefined) {
   return (msg: Msg) =>
     !list ||
-    ((msg &&
-      msg.value &&
-      msg.value.content &&
-      msg.value.content.type &&
+    ((msg?.value?.content?.type &&
       list.indexOf(msg.value.content.type) > -1) as boolean);
 }
 
@@ -127,11 +119,7 @@ function makeBlockFilter(list: Array<string> | undefined) {
   return (msg: Msg) =>
     !list ||
     (!(
-      msg &&
-      msg.value &&
-      msg.value.content &&
-      msg.value.content.type &&
-      list.indexOf(msg.value.content.type) > -1
+      msg?.value?.content?.type && list.indexOf(msg.value.content.type) > -1
     ) as boolean);
 }
 
@@ -203,10 +191,10 @@ function rootToThread(sbot: any, maxSize: number, filter: Filter) {
 }
 
 function init(sbot: any, _config: any) {
-  if (!sbot.backlinks || !sbot.backlinks.read) {
+  if (!sbot.backlinks?.read) {
     throw new Error('"ssb-threads" is missing required plugin "ssb-backlinks"');
   }
-  if (sbot.friends && sbot.friends.isBlocking) {
+  if (sbot.friends?.isBlocking) {
     isBlocking = sbot.friends.isBlocking;
   }
   const publicIndex = buildPublicIndex(sbot);
@@ -217,8 +205,8 @@ function init(sbot: any, _config: any) {
       const lt = opts.lt;
       const reverse = opts.reverse === false ? false : true;
       const live = opts.live === true ? true : false;
-      const maxThreads = opts.limit || Infinity;
-      const threadMaxSize = opts.threadMaxSize || Infinity;
+      const maxThreads = opts.limit ?? Infinity;
+      const threadMaxSize = opts.threadMaxSize ?? Infinity;
       const filter = makeFilter(opts);
 
       return pull(
@@ -260,8 +248,8 @@ function init(sbot: any, _config: any) {
       const lt = opts.lt;
       const reverse = opts.reverse === false ? false : true;
       const live = opts.live === true ? true : false;
-      const maxThreads = opts.limit || Infinity;
-      const threadMaxSize = opts.threadMaxSize || Infinity;
+      const maxThreads = opts.limit ?? Infinity;
+      const threadMaxSize = opts.threadMaxSize ?? Infinity;
       const filter = makeFilter(opts);
 
       return pull(
@@ -287,7 +275,7 @@ function init(sbot: any, _config: any) {
     },
 
     thread: function _thread(opts: ThreadOpts) {
-      const threadMaxSize = opts.threadMaxSize || Infinity;
+      const threadMaxSize = opts.threadMaxSize ?? Infinity;
       const rootToMsg = (val: Msg['value']): Msg => ({
         key: opts.root,
         value: val,
