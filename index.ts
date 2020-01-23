@@ -68,7 +68,11 @@ function isPublic(msg: Msg<any>): boolean {
   return !msg.value.content || typeof msg.value.content !== 'string';
 }
 
-function hasRoot(rootKey: MsgId) {
+function isRoot(msg: Msg<any>): boolean {
+  return !msg?.value?.content?.root;
+}
+
+function isReplyToRoot(rootKey: MsgId) {
   return (msg: Msg<{ root?: MsgId }>) => msg?.value?.content?.root === rootKey;
 }
 
@@ -97,9 +101,10 @@ function makeFilter(opts: FilterOpts): (msg: Msg) => boolean {
 class threads {
   private readonly ssb: Record<string, any>;
   private readonly isBlocking: (obj: any, cb: CB<boolean>) => void;
+  private readonly rootMsgCache: QuickLRU<MsgId, Msg<any>>;
+  private readonly supportsPrivate: boolean;
   private readonly publicIndex: { read: CallableFunction };
   private readonly profilesIndex: { read: CallableFunction };
-  private readonly rootMsgCache: QuickLRU<MsgId, Msg<any>>;
 
   constructor(ssb: Record<string, any>, _config: any) {
     if (!ssb.backlinks?.read) {
@@ -113,6 +118,7 @@ class threads {
       ? ssb.friends.isBlocking
       : IS_BLOCKING_NEVER;
     this.rootMsgCache = new QuickLRU({ maxSize: REASONABLE_CACHE_SIZE });
+    this.supportsPrivate = !!this.ssb.private?.read;
     this.publicIndex = this.buildPublicIndex();
     this.profilesIndex = this.buildProfilesIndex();
   }
@@ -157,7 +163,11 @@ class threads {
       pull.filter(),
     );
 
-  private nonBlockedRootToThread = (maxSize: number, filter: Filter) => {
+  private nonBlockedRootToThread = (
+    maxSize: number,
+    filter: Filter,
+    privately: boolean = false,
+  ) => {
     return (root: Msg, cb: CB<Thread>) => {
       pull(
         cat([
@@ -166,10 +176,11 @@ class threads {
             this.ssb.backlinks.read({
               query: [{ $filter: { dest: root.key } }],
               index: 'DTA',
+              private: privately,
               live: false,
               reverse: true,
             }),
-            pull.filter(hasRoot(root.key)),
+            pull.filter(isReplyToRoot(root.key)),
             this.removeMessagesFromBlocked,
             pull.filter(filter),
             pull.take(maxSize),
@@ -291,6 +302,37 @@ class threads {
       this.removeMessagesFromBlocked,
       pull.filter(filter),
       pull.map((msg: Msg) => msg.key),
+    );
+  };
+
+  @muxrpc('source')
+  public private = (opts: Opts) => {
+    if (!this.supportsPrivate) {
+      throw new Error('"ssb-threads" is missing required plugin "ssb-private"');
+    }
+    const lt = opts.lt;
+    const reverse = opts.reverse === false ? false : true;
+    const live = opts.live === true ? true : false;
+    const maxThreads = opts.limit ?? Infinity;
+    const threadMaxSize = opts.threadMaxSize ?? Infinity;
+    const filter = makeFilter(opts);
+
+    const privateOpts = {
+      live,
+      reverse,
+      old: true,
+      query: reverse
+        ? [{ $filter: { timestamp: lt ? { $lt: lt, $gt: 0 } : { $gt: 0 } } }]
+        : [{ $filter: { timestamp: lt ? { $gt: lt } : { $gt: 0 } } }],
+    };
+
+    return pull(
+      this.ssb.private.read(privateOpts),
+      pull.filter(isRoot),
+      this.removeMessagesFromBlocked,
+      pull.filter(filter),
+      pull.take(maxThreads),
+      pull.asyncMap(this.nonBlockedRootToThread(threadMaxSize, filter, true)),
     );
   };
 

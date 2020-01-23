@@ -31,6 +31,7 @@
     "pull-async": "1.0.0",
     "pull-notify": "^0.1.1",
     "ssb-backlinks": "0.7.3",
+    "ssb-private": "~0.2.3",
     "ssb-keys": "7.2.0",
     "ssb-server": "~15.2.0",
     "tape": "4.13.0",

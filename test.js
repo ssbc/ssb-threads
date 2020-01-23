@@ -8,6 +8,7 @@ const pullAsync = require('pull-async');
 
 const CreateTestSbot = require('ssb-server/index')
   .use(require('ssb-backlinks'))
+  .use(require('ssb-private'))
   .use(require('./lib/index'));
 
 const lucyKeys = ssbKeys.generate();
@@ -25,6 +26,60 @@ test('threads.public gives a simple well-formed thread', t => {
 
   pull(
     pullAsync(cb => {
+      lucy.add({ type: 'post', text: 'Thread root' }, cb);
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      lucy.add({ type: 'post', text: 'Second message', root: rootMsg.key }, cb);
+    }),
+    pull.asyncMap((prevMsg, cb) => {
+      const rootKey = prevMsg.value.content.root;
+      lucy.add({ type: 'post', text: 'Third message', root: rootKey }, cb);
+    }),
+    pull.map(() => myTestSbot.threads.public({})),
+    pull.flatten(),
+
+    pull.collect((err, threads) => {
+      t.error(err);
+      t.equals(threads.length, 1, 'only one thread');
+      const thread = threads[0];
+      t.equals(thread.full, true, 'thread comes back full');
+      t.equals(thread.messages.length, 3, 'thread has 3 messages');
+
+      const msgs = thread.messages;
+      const rootKey = msgs[0].key;
+      t.equals(msgs[0].value.content.root, undefined, '1st message is root');
+      t.equals(msgs[0].value.content.text, 'Thread root');
+
+      t.equals(msgs[1].value.content.root, rootKey, '2nd message is not root');
+      t.equals(msgs[1].value.content.text, 'Second message');
+
+      t.equals(msgs[2].value.content.root, rootKey, '3rd message is not root');
+      t.equals(msgs[2].value.content.text, 'Third message');
+      myTestSbot.close();
+      t.end();
+    }),
+  );
+});
+
+test('threads.public does not show any private threads', t => {
+  const myTestSbot = CreateTestSbot({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    temp: true,
+    name: 'test1',
+    keys: lucyKeys,
+  });
+
+  const lucy = myTestSbot.createFeed(lucyKeys);
+
+  pull(
+    pullAsync(cb => {
+      myTestSbot.private.publish(
+        { type: 'post', text: 'Secret thread root' },
+        [myTestSbot.id],
+        cb,
+      );
+    }),
+    pull.asyncMap((_, cb) => {
       lucy.add({ type: 'post', text: 'Thread root' }, cb);
     }),
     pull.asyncMap((rootMsg, cb) => {
@@ -342,6 +397,74 @@ test('threads.publicUpdates notifies of new thread or new msg', t => {
       t.equals(updates, 2);
       myTestSbot.close();
       t.end();
+    }),
+  );
+});
+
+test('threads.private gives a simple well-formed thread', t => {
+  const myTestSbot = CreateTestSbot({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    temp: true,
+    name: 'test1',
+    keys: lucyKeys,
+  });
+
+  const lucy = myTestSbot.createFeed(lucyKeys);
+  let rootKey;
+
+  pull(
+    pullAsync(cb => {
+      myTestSbot.private.publish(
+        { type: 'post', text: 'Secret thread root' },
+        [myTestSbot.id],
+        cb,
+      );
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      rootKey = rootMsg.key;
+      myTestSbot.private.publish(
+        { type: 'post', text: 'Second secret message', root: rootKey },
+        [myTestSbot.id],
+        cb,
+      );
+    }),
+    pull.asyncMap((_prevMsg, cb) => {
+      myTestSbot.private.publish(
+        { type: 'post', text: 'Third secret message', root: rootKey },
+        [myTestSbot.id],
+        cb,
+      );
+    }),
+    pull.map(() => myTestSbot.threads.private({})),
+    pull.flatten(),
+
+    pull.collect((err, sthreads) => {
+      t.error(err);
+      t.equals(sthreads.length, 1, 'only one secret thread');
+      const thread = sthreads[0];
+      t.equals(thread.full, true, 'thread comes back full');
+      t.equals(thread.messages.length, 3, 'thread has 3 messages');
+
+      const msgs = thread.messages;
+      const rootKey = msgs[0].key;
+      t.equals(msgs[0].value.content.root, undefined, '1st message is root');
+      t.equals(msgs[0].value.content.text, 'Secret thread root');
+
+      t.equals(msgs[1].value.content.root, rootKey, '2nd message is not root');
+      t.equals(msgs[1].value.content.text, 'Second secret message');
+
+      t.equals(msgs[2].value.content.root, rootKey, '3rd message is not root');
+      t.equals(msgs[2].value.content.text, 'Third secret message');
+
+      pull(
+        myTestSbot.threads.public({}),
+        pull.collect((err, threads) => {
+          t.error(err);
+          t.equals(threads.length, 0, 'there are no public threads');
+          myTestSbot.close();
+          t.end();
+        }),
+      );
     }),
   );
 });
