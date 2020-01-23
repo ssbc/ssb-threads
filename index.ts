@@ -1,4 +1,5 @@
 import { Msg, MsgId } from 'ssb-typescript';
+import { plugin, muxrpc } from 'secret-stack-decorators';
 import QuickLRU = require('quick-lru');
 import {
   Opts,
@@ -12,12 +13,24 @@ const pull = require('pull-stream');
 const cat = require('pull-cat');
 const FlumeViewLevel = require('flumeview-level');
 const sort = require('ssb-sort');
-const ssbRef = require('ssb-ref');
+const Ref = require('ssb-ref');
 
+type CB<T> = (err: any, val?: T) => void;
 type Filter = (msg: Msg) => boolean;
-type IndexItem = [string, number, MsgId];
+type IndexItem = [
+  /* prefix label */ string,
+  /* timestamp */ number,
+  /* root msg key */ MsgId,
+];
 
-let isBlocking = (obj: any, cb: Function) => {
+/**
+ * The average SSB message in JSON is about 0.5 KB — 1.5 KB in size.
+ * 400 of these are then roughly 0.5 MB. This should be a reasonable
+ * cost in RAM for the added benefit of lookup speed for 2010+ hardware.
+ */
+const REASONABLE_CACHE_SIZE = 400;
+
+const IS_BLOCKING_NEVER = (obj: any, cb: CB<boolean>) => {
   cb(null, false);
 };
 
@@ -27,29 +40,12 @@ function getTimestamp(msg: Msg<any>): number {
   return Math.min(arrivalTimestamp, declaredTimestamp);
 }
 
-function getRootMsgId(msg: Msg<any>): MsgId | undefined {
+function getRootMsgId(msg: Msg<any>): MsgId {
   if (msg?.value?.content) {
     const root = msg.value.content.root;
-    if (ssbRef.isMsgId(root)) return root;
+    if (Ref.isMsgId(root)) return root;
   }
-}
-
-function buildPublicIndex(ssb: any) {
-  return ssb._flumeUse(
-    'threads-public',
-    FlumeViewLevel(2, (msg: Msg, _seq: number) => [
-      ['any', getTimestamp(msg), getRootMsgId(msg) ?? msg.key],
-    ]),
-  );
-}
-
-function buildProfilesIndex(ssb: any) {
-  return ssb._flumeUse(
-    'threads-profiles',
-    FlumeViewLevel(2, (msg: Msg, _seq: number) => [
-      [msg.value.author, getTimestamp(msg), getRootMsgId(msg) ?? msg.key],
-    ]),
-  );
+  return msg.key; // this msg has no root so we assume this is a root
 }
 
 function isValidIndexItem(item: Array<any>) {
@@ -58,7 +54,7 @@ function isValidIndexItem(item: Array<any>) {
 
 function isUnique(uniqueRoots: Set<MsgId>) {
   return function checkIsUnique(item: IndexItem) {
-    const rootKey = item[2];
+    const [, , rootKey] = item;
     if (uniqueRoots.has(rootKey)) {
       return false;
     } else {
@@ -70,38 +66,6 @@ function isUnique(uniqueRoots: Set<MsgId>) {
 
 function isPublic(msg: Msg<any>): boolean {
   return !msg.value.content || typeof msg.value.content !== 'string';
-}
-
-function isNotMine(sbot: any) {
-  return function isNotMineGivenSbot(msg: Msg<any>): boolean {
-    return msg?.value?.author !== sbot.id;
-  };
-}
-
-function materialize(sbot: any, cache: QuickLRU<MsgId, Msg<any>>) {
-  function sbotGetWithCache(item: IndexItem, cb: (e: any, msg?: Msg) => void) {
-    const [, timestamp, key] = item;
-    if (cache.has(key)) {
-      cb(null, cache.get(key) as Msg);
-    } else {
-      sbot.get(key, (err: any, value: Msg['value']) => {
-        if (err) return cb(err);
-        var msg = { key, value, timestamp };
-        if (msg.value) cache.set(key, msg);
-        cb(null, msg);
-      });
-    }
-  }
-
-  return function fetchMsg(
-    item: IndexItem,
-    cb: (err: any, msg?: Msg | false) => void,
-  ) {
-    sbotGetWithCache(item, (err, msg) => {
-      if (err) return cb(null, false);
-      cb(null, msg);
-    });
-  };
 }
 
 function hasRoot(rootKey: MsgId) {
@@ -123,13 +87,64 @@ function makeBlockFilter(list: Array<string> | undefined) {
     ) as boolean);
 }
 
-function removeMessagesFromBlocked(sbot: any) {
-  return (inputPullStream: any) =>
+function makeFilter(opts: FilterOpts): (msg: Msg) => boolean {
+  const passesAllowList = makeAllowFilter(opts.allowlist);
+  const passesBlockList = makeBlockFilter(opts.blocklist);
+  return (m: Msg) => passesAllowList(m) && passesBlockList(m);
+}
+
+@plugin('2.0.0')
+class threads {
+  private readonly ssb: Record<string, any>;
+  private readonly isBlocking: (obj: any, cb: CB<boolean>) => void;
+  private readonly publicIndex: { read: CallableFunction };
+  private readonly profilesIndex: { read: CallableFunction };
+  private readonly rootMsgCache: QuickLRU<MsgId, Msg<any>>;
+
+  constructor(ssb: Record<string, any>, _config: any) {
+    if (!ssb.backlinks?.read) {
+      throw new Error(
+        '"ssb-threads" is missing required plugin "ssb-backlinks"',
+      );
+    }
+
+    this.ssb = ssb;
+    this.isBlocking = ssb.friends?.isBlocking
+      ? ssb.friends.isBlocking
+      : IS_BLOCKING_NEVER;
+    this.rootMsgCache = new QuickLRU({ maxSize: REASONABLE_CACHE_SIZE });
+    this.publicIndex = this.buildPublicIndex();
+    this.profilesIndex = this.buildProfilesIndex();
+  }
+
+  private buildPublicIndex() {
+    return this.ssb._flumeUse(
+      'threads-public',
+      FlumeViewLevel(2, (msg: Msg, _seq: number) => [
+        ['any', getTimestamp(msg), getRootMsgId(msg)] as IndexItem,
+      ]),
+    );
+  }
+
+  private buildProfilesIndex() {
+    return this.ssb._flumeUse(
+      'threads-profiles',
+      FlumeViewLevel(2, (msg: Msg, _seq: number) => [
+        [msg.value.author, getTimestamp(msg), getRootMsgId(msg)] as IndexItem,
+      ]),
+    );
+  }
+
+  private isNotMine = (msg: Msg<any>): boolean => {
+    return msg?.value?.author !== this.ssb.id;
+  };
+
+  private removeMessagesFromBlocked = (inputPullStream: any) =>
     pull(
       inputPullStream,
-      pull.asyncMap((msg: Msg, cb: (e: any, done?: Msg | null) => void) => {
-        isBlocking(
-          { source: sbot.id, dest: msg.value.author },
+      pull.asyncMap((msg: Msg, cb: CB<Msg | null>) => {
+        this.isBlocking(
+          { source: this.ssb.id, dest: msg.value.author },
           (err: any, blocking: boolean) => {
             if (err) cb(err);
             else if (blocking) cb(null, null);
@@ -139,176 +154,182 @@ function removeMessagesFromBlocked(sbot: any) {
       }),
       pull.filter(),
     );
-}
 
-function makeFilter(opts: FilterOpts): (msg: Msg) => boolean {
-  const passesAllowList = makeAllowFilter(opts.allowlist);
-  const passesBlockList = makeBlockFilter(opts.blocklist);
-  return (m: Msg) => passesAllowList(m) && passesBlockList(m);
-}
+  private nonBlockedRootToThread = (maxSize: number, filter: Filter) => {
+    return (root: Msg, cb: CB<Thread>) => {
+      pull(
+        cat([
+          pull.values([root]),
+          pull(
+            this.ssb.backlinks.read({
+              query: [{ $filter: { dest: root.key } }],
+              index: 'DTA',
+              live: false,
+              reverse: true,
+            }),
+            pull.filter(hasRoot(root.key)),
+            this.removeMessagesFromBlocked,
+            pull.filter(filter),
+            pull.take(maxSize),
+          ),
+        ]),
+        pull.take(maxSize + 1),
+        pull.collect((err2: any, arr: Array<Msg>) => {
+          if (err2) return cb(err2);
+          const full = arr.length <= maxSize;
+          sort(arr);
+          if (arr.length > maxSize && arr.length >= 3) arr.splice(1, 1);
+          cb(null, { messages: arr, full });
+        }),
+      );
+    };
+  };
 
-function nonBlockedRootToThread(sbot: any, maxSize: number, filter: Filter) {
-  return (root: Msg, cb: (err: any, thread?: Thread) => void) => {
+  /**
+   * Returns a pull-stream operator pipeline that:
+   * 1. Picks the MsgId from the source IndexItem
+   * 2. Checks if there is a Msg in the cache for that id, and returns that
+   * 3. If not in the cache, do a database lookup
+   * 4. If an error occurs when looking up the database, ignore the error
+   */
+  private fetchRootMsgFromIndexItem = (source: any) =>
     pull(
-      cat([
-        pull.values([root]),
-        pull(
-          sbot.backlinks.read({
-            query: [{ $filter: { dest: root.key } }],
-            index: 'DTA',
-            live: false,
-            reverse: true,
-          }),
-          pull.filter(hasRoot(root.key)),
-          removeMessagesFromBlocked(sbot),
-          pull.filter(filter),
-          pull.take(maxSize),
-        ),
-      ]),
-      pull.take(maxSize + 1),
-      pull.collect((err2: any, arr: Array<Msg>) => {
-        if (err2) return cb(err2);
-        const full = arr.length <= maxSize;
-        sort(arr);
-        if (arr.length > maxSize && arr.length >= 3) arr.splice(1, 1);
-        cb(null, { messages: arr, full });
+      source,
+      pull.asyncMap((item: IndexItem, cb: CB<Msg<any> | false>) => {
+        const [, , id] = item;
+        if (this.rootMsgCache.has(id)) {
+          cb(null, this.rootMsgCache.get(id)!);
+        } else {
+          this.ssb.get({ id, meta: true }, (err: any, msg: Msg<any>) => {
+            if (err) return cb(null, false);
+            if (msg.value) this.rootMsgCache.set(id, msg);
+            cb(null, msg);
+          });
+        }
       }),
+      pull.filter((x: Msg | false) => x !== false),
     );
-  };
-}
 
-function rootToThread(sbot: any, maxSize: number, filter: Filter) {
-  return (root: Msg, cb: (err: any, thread?: Thread) => void) => {
-    isBlocking(
-      { source: sbot.id, dest: root.value.author },
-      (err: any, blocking: boolean) => {
-        if (err) cb(err);
-        else if (blocking) cb(new Error('Author Blocked:' + root.value.author));
-        else nonBlockedRootToThread(sbot, maxSize, filter)(root, cb);
-      },
-    );
-  };
-}
-
-function init(sbot: any, _config: any) {
-  if (!sbot.backlinks?.read) {
-    throw new Error('"ssb-threads" is missing required plugin "ssb-backlinks"');
-  }
-  if (sbot.friends?.isBlocking) {
-    isBlocking = sbot.friends.isBlocking;
-  }
-  const publicIndex = buildPublicIndex(sbot);
-  const profilesIndex = buildProfilesIndex(sbot);
-
-  return {
-    public: function _public(opts: Opts) {
-      const lt = opts.lt;
-      const reverse = opts.reverse === false ? false : true;
-      const live = opts.live === true ? true : false;
-      const maxThreads = opts.limit ?? Infinity;
-      const threadMaxSize = opts.threadMaxSize ?? Infinity;
-      const filter = makeFilter(opts);
-
-      return pull(
-        publicIndex.read({
-          lt: ['any', lt, undefined],
-          reverse,
-          live,
-          keys: true,
-          values: false,
-          seqs: false,
-        }),
-        pull.filter(isValidIndexItem),
-        pull.filter(isUnique(new Set())),
-        pull.asyncMap(materialize(sbot, new QuickLRU({ maxSize: 200 }))),
-        pull.filter((x: Msg | false) => x !== false),
-        pull.filter(isPublic),
-        removeMessagesFromBlocked(sbot),
-        pull.filter(filter),
-        pull.take(maxThreads),
-        pull.asyncMap(nonBlockedRootToThread(sbot, threadMaxSize, filter)),
-      );
-    },
-
-    publicUpdates: function _publicUpdates(opts: UpdatesOpts) {
-      const filter = makeFilter(opts);
-
-      return pull(
-        sbot.createFeedStream({ reverse: false, old: false, live: true }),
-        pull.filter(isNotMine(sbot)),
-        pull.filter(isPublic),
-        removeMessagesFromBlocked(sbot),
-        pull.filter(filter),
-        pull.map((msg: Msg) => msg.key),
-      );
-    },
-
-    profile: function _profile(opts: ProfileOpts) {
-      const id = opts.id;
-      const lt = opts.lt;
-      const reverse = opts.reverse === false ? false : true;
-      const live = opts.live === true ? true : false;
-      const maxThreads = opts.limit ?? Infinity;
-      const threadMaxSize = opts.threadMaxSize ?? Infinity;
-      const filter = makeFilter(opts);
-
-      return pull(
-        profilesIndex.read({
-          lt: [id, lt, undefined],
-          gt: [id, null, undefined],
-          reverse,
-          live,
-          keys: true,
-          values: false,
-          seqs: false,
-        }),
-        pull.filter(isValidIndexItem),
-        pull.filter(isUnique(new Set())),
-        pull.asyncMap(materialize(sbot, new QuickLRU({ maxSize: 200 }))),
-        pull.filter((x: Msg | false) => x !== false),
-        pull.filter(isPublic),
-        removeMessagesFromBlocked(sbot),
-        pull.filter(filter),
-        pull.take(maxThreads),
-        pull.asyncMap(nonBlockedRootToThread(sbot, threadMaxSize, filter)),
-      );
-    },
-
-    thread: function _thread(opts: ThreadOpts) {
-      const threadMaxSize = opts.threadMaxSize ?? Infinity;
-      const rootToMsg = (val: Msg['value']): Msg => ({
-        key: opts.root,
-        value: val,
-        timestamp: val.timestamp,
+  /**
+   * Returns a pull-stream operator that:
+   * 1. Checks if there is a Msg in the cache for the source MsgId
+   * 2. If not in the cache, do a database lookup
+   */
+  private fetchMsgFromId = pull.asyncMap((id: MsgId, cb: CB<Msg<any>>) => {
+    if (this.rootMsgCache.has(id)) {
+      cb(null, this.rootMsgCache.get(id)!);
+    } else {
+      this.ssb.get({ id, meta: true }, (err: any, msg: Msg<any>) => {
+        if (err) return cb(err);
+        if (msg.value) this.rootMsgCache.set(id, msg);
+        cb(null, msg);
       });
-      if (!opts.allowlist && !opts.blocklist) {
-        opts.allowlist = ['post'];
-      }
-      const filterPosts = makeFilter(opts);
+    }
+  });
 
-      return pull(
-        pull.values([opts.root]),
-        pull.asyncMap(sbot.get.bind(sbot)),
-        pull.map(rootToMsg),
-        pull.asyncMap(rootToThread(sbot, threadMaxSize, filterPosts)),
+  private rootToThread = (maxSize: number, filter: Filter) => {
+    return pull.asyncMap((root: Msg, cb: CB<Thread>) => {
+      this.isBlocking(
+        { source: this.ssb.id, dest: root.value.author },
+        (err: any, blocking: boolean) => {
+          if (err) cb(err);
+          else if (blocking)
+            cb(new Error('Author Blocked:' + root.value.author));
+          else this.nonBlockedRootToThread(maxSize, filter)(root, cb);
+        },
       );
-    },
+    });
+  };
+
+  @muxrpc('source')
+  public public = (opts: Opts) => {
+    const lt = opts.lt;
+    const reverse = opts.reverse === false ? false : true;
+    const live = opts.live === true ? true : false;
+    const maxThreads = opts.limit ?? Infinity;
+    const threadMaxSize = opts.threadMaxSize ?? Infinity;
+    const filter = makeFilter(opts);
+
+    return pull(
+      this.publicIndex.read({
+        lt: ['any', lt, undefined],
+        reverse,
+        live,
+        keys: true,
+        values: false,
+        seqs: false,
+      }),
+      pull.filter(isValidIndexItem),
+      pull.filter(isUnique(new Set())),
+      this.fetchRootMsgFromIndexItem,
+      pull.filter(isPublic),
+      this.removeMessagesFromBlocked,
+      pull.filter(filter),
+      pull.take(maxThreads),
+      pull.asyncMap(this.nonBlockedRootToThread(threadMaxSize, filter)),
+    );
+  };
+
+  @muxrpc('source')
+  public publicUpdates = (opts: UpdatesOpts) => {
+    const filter = makeFilter(opts);
+
+    return pull(
+      this.ssb.createFeedStream({ reverse: false, old: false, live: true }),
+      pull.filter(this.isNotMine),
+      pull.filter(isPublic),
+      this.removeMessagesFromBlocked,
+      pull.filter(filter),
+      pull.map((msg: Msg) => msg.key),
+    );
+  };
+
+  @muxrpc('source')
+  public profile = (opts: ProfileOpts) => {
+    const id = opts.id;
+    const lt = opts.lt;
+    const reverse = opts.reverse === false ? false : true;
+    const live = opts.live === true ? true : false;
+    const maxThreads = opts.limit ?? Infinity;
+    const threadMaxSize = opts.threadMaxSize ?? Infinity;
+    const filter = makeFilter(opts);
+
+    return pull(
+      this.profilesIndex.read({
+        lt: [id, lt, undefined],
+        gt: [id, null, undefined],
+        reverse,
+        live,
+        keys: true,
+        values: false,
+        seqs: false,
+      }),
+      pull.filter(isValidIndexItem),
+      pull.filter(isUnique(new Set())),
+      this.fetchRootMsgFromIndexItem,
+      pull.filter(isPublic),
+      this.removeMessagesFromBlocked,
+      pull.filter(filter),
+      pull.take(maxThreads),
+      pull.asyncMap(this.nonBlockedRootToThread(threadMaxSize, filter)),
+    );
+  };
+
+  @muxrpc('source')
+  public thread = (opts: ThreadOpts) => {
+    const threadMaxSize = opts.threadMaxSize ?? Infinity;
+    const optsOk =
+      !opts.allowlist && !opts.blocklist
+        ? { ...opts, allowlist: ['post'] }
+        : opts;
+    const filterPosts = makeFilter(optsOk);
+
+    return pull(
+      pull.values([opts.root]),
+      this.fetchMsgFromId,
+      this.rootToThread(threadMaxSize, filterPosts),
+    );
   };
 }
 
-export = {
-  name: 'threads',
-  version: '2.0.0',
-  manifest: {
-    public: 'source',
-    publicUpdates: 'source',
-    profile: 'source',
-    thread: 'source',
-  },
-  permissions: {
-    master: {
-      allow: ['public', 'profile', 'thread'],
-    },
-  },
-  init,
-};
+export = threads;

@@ -21,6 +21,7 @@
     "pull-cat": "^1.1.11",
     "pull-stream": "^3.6.2",
     "quick-lru": "~4.0.1",
+    "secret-stack-decorators": "1.0.0",
     "ssb-ref": "^2.11.0",
     "ssb-sort": "1.1.x",
     "ssb-typescript": "~1.4.0"
