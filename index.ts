@@ -139,9 +139,9 @@ class threads {
     return msg?.value?.author !== this.ssb.id;
   };
 
-  private removeMessagesFromBlocked = (inputPullStream: any) =>
+  private removeMessagesFromBlocked = (source: any) =>
     pull(
-      inputPullStream,
+      source,
       pull.asyncMap((msg: Msg, cb: CB<Msg | null>) => {
         this.isBlocking(
           { source: this.ssb.id, dest: msg.value.author },
@@ -215,17 +215,21 @@ class threads {
    * 1. Checks if there is a Msg in the cache for the source MsgId
    * 2. If not in the cache, do a database lookup
    */
-  private fetchMsgFromId = pull.asyncMap((id: MsgId, cb: CB<Msg<any>>) => {
-    if (this.rootMsgCache.has(id)) {
-      cb(null, this.rootMsgCache.get(id)!);
-    } else {
-      this.ssb.get({ id, meta: true }, (err: any, msg: Msg<any>) => {
-        if (err) return cb(err);
-        if (msg.value) this.rootMsgCache.set(id, msg);
-        cb(null, msg);
-      });
-    }
-  });
+  private fetchMsgFromId = (source: any) =>
+    pull(
+      source,
+      pull.asyncMap((id: MsgId, cb: CB<Msg<any>>) => {
+        if (this.rootMsgCache.has(id)) {
+          cb(null, this.rootMsgCache.get(id)!);
+        } else {
+          this.ssb.get({ id, meta: true }, (err: any, msg: Msg<any>) => {
+            if (err) return cb(err);
+            if (msg.value) this.rootMsgCache.set(id, msg);
+            cb(null, msg);
+          });
+        }
+      }),
+    );
 
   private rootToThread = (maxSize: number, filter: Filter) => {
     return pull.asyncMap((root: Msg, cb: CB<Thread>) => {
