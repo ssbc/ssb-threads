@@ -117,6 +117,8 @@ class threads {
     this.profilesIndex = this.buildProfilesIndex();
   }
 
+  //#region PRIVATE
+
   private buildPublicIndex() {
     return this.ssb._flumeUse(
       'threads-public',
@@ -245,6 +247,10 @@ class threads {
     });
   };
 
+  //#endregion
+
+  //#region PUBLIC API
+
   @muxrpc('source')
   public public = (opts: Opts) => {
     const lt = opts.lt;
@@ -334,6 +340,7 @@ class threads {
       this.rootToThread(threadMaxSize, filterPosts),
     );
   };
+  //#endregion
 }
 
 export = threads;
