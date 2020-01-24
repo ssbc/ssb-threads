@@ -4,8 +4,7 @@
 
 ## Usage
 
-Requires the backlinks plugin.
-If the ssb-friends plugin is available it will filter the messages of blocked users.
+**Requires the backlinks plugin.** If the **ssb-friends** plugin is available it will filter the messages of blocked users.
 
 ```diff
  const createSbot = require('scuttlebot/index')
@@ -62,6 +61,19 @@ Returns a ("live") pull stream that emits a message key (strings) for every new 
 * `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
 
+### `sbot.threads.private(opts)`
+
+**Requires the **ssb-private** plugin to be installed.**
+
+Returns a pull stream that emits thread objects of private conversations.
+
+* `opts.reverse`: boolean
+* `opts.limit`: optional number (default: Infinity). Dictates the maximum amount of
+  threads this pull stream will return
+* `opts.threadMaxSize`: optional number (default: Infinity). Dictates the maximum amount of messages in each returned thread object. Serves for previewing threads, particularly long ones.
+* `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
+* `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
+
 ### `sbot.threads.profile(opts)`
 
 Returns a pull stream that emits thread objects of public messages initiated by a certain profile `id`.
@@ -83,8 +95,10 @@ Returns a pull stream that emits one thread object of messages under the root id
 * `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
 
-If `opts.allowlist` and `opts.blocklist` are not defined, 
+If `opts.allowlist` and `opts.blocklist` are not defined,
 only messages of type **post** will be returned.
+
+**If the `opts.root` is an encrypted message, this will attempt to unbox the message, and if that succeeds, then all of the replies in this thread will be also unboxed. ⚠️ Warning: this is why you should only use this method locally and not allow remote peers to call `sbot.threads.thread`, you don't want them to see your encrypted messages.**
 
 ## Install
 

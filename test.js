@@ -510,3 +510,55 @@ test('threads.thread gives one full thread', t => {
     }),
   );
 });
+
+test('threads.thread can view private conversations', t => {
+  const myTestSbot = CreateTestSbot({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    temp: true,
+    name: 'test1',
+    keys: lucyKeys,
+  });
+
+  const lucy = myTestSbot.createFeed(lucyKeys);
+  let rootKey;
+
+  pull(
+    pullAsync(cb => {
+      myTestSbot.private.publish(
+        { type: 'post', text: 'Secret thread root' },
+        [myTestSbot.id],
+        cb,
+      );
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      rootKey = rootMsg.key;
+      myTestSbot.private.publish(
+        { type: 'post', text: 'Second secret message', root: rootKey },
+        [myTestSbot.id],
+        cb,
+      );
+    }),
+    pull.asyncMap((_prevMsg, cb) => {
+      myTestSbot.private.publish(
+        { type: 'post', text: 'Third secret message', root: rootKey },
+        [myTestSbot.id],
+        cb,
+      );
+    }),
+    pull.map(() => myTestSbot.threads.thread({ root: rootKey })),
+    pull.flatten(),
+
+    pull.collect((err, threads) => {
+      t.error(err, 'no error');
+      t.equals(threads.length, 1, 'one one secret thread');
+      const thread = threads[0];
+      t.equals(thread.full, true, 'thread comes back full');
+      t.equals(thread.messages.length, 3, 'thread has 3 messages');
+      t.equals(thread.messages[0].value.content.text, 'Secret thread root');
+      t.equals(thread.messages[1].value.content.text, 'Second secret message');
+      t.equals(thread.messages[2].value.content.text, 'Third secret message');
+      myTestSbot.close();
+      t.end();
+    }),
+  );
+});

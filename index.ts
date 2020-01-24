@@ -1,4 +1,4 @@
-import { Msg, MsgId } from 'ssb-typescript';
+import { Msg, MsgId, UnboxedMsg } from 'ssb-typescript';
 import { plugin, muxrpc } from 'secret-stack-decorators';
 import QuickLRU = require('quick-lru');
 import {
@@ -118,7 +118,7 @@ class threads {
       ? ssb.friends.isBlocking
       : IS_BLOCKING_NEVER;
     this.rootMsgCache = new QuickLRU({ maxSize: REASONABLE_CACHE_SIZE });
-    this.supportsPrivate = !!this.ssb.private?.read;
+    this.supportsPrivate = !!ssb.private?.read && !!ssb.private?.unbox;
     this.publicIndex = this.buildPublicIndex();
     this.profilesIndex = this.buildProfilesIndex();
   }
@@ -244,15 +244,27 @@ class threads {
       }),
     );
 
+  private maybeUnboxMsg = (msg: Msg): Msg | UnboxedMsg => {
+    if (typeof msg.value.content !== 'string') return msg;
+    if (!this.supportsPrivate) {
+      throw new Error('"ssb-threads" is missing required plugin "ssb-private"');
+    }
+
+    return this.ssb.private?.unbox(msg);
+  };
+
   private rootToThread = (maxSize: number, filter: Filter) => {
-    return pull.asyncMap((root: Msg, cb: CB<Thread>) => {
+    return pull.asyncMap((root: UnboxedMsg, cb: CB<Thread>) => {
       this.isBlocking(
         { source: this.ssb.id, dest: root.value.author },
         (err: any, blocking: boolean) => {
           if (err) cb(err);
           else if (blocking)
             cb(new Error('Author Blocked:' + root.value.author));
-          else this.nonBlockedRootToThread(maxSize, filter)(root, cb);
+          else {
+            const privately = root.value?.private ?? false;
+            this.nonBlockedRootToThread(maxSize, filter, privately)(root, cb);
+          }
         },
       );
     });
@@ -379,6 +391,7 @@ class threads {
     return pull(
       pull.values([opts.root]),
       this.fetchMsgFromId,
+      pull.map(this.maybeUnboxMsg),
       this.rootToThread(threadMaxSize, filterPosts),
     );
   };

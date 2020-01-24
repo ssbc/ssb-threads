@@ -24,7 +24,7 @@
     "secret-stack-decorators": "1.0.0",
     "ssb-ref": "^2.11.0",
     "ssb-sort": "1.1.x",
-    "ssb-typescript": "~1.4.0"
+    "ssb-typescript": "~1.5.0"
   },
   "devDependencies": {
     "@types/node": "^13.1.8",
