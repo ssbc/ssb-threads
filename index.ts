@@ -25,10 +25,10 @@ type IndexItem = [
 
 /**
  * The average SSB message in JSON is about 0.5 KB — 1.5 KB in size.
- * 400 of these are then roughly 0.5 MB. This should be a reasonable
+ * 800 of these are then roughly 1 MB. This should be a reasonable
  * cost in RAM for the added benefit of lookup speed for 2010+ hardware.
  */
-const REASONABLE_CACHE_SIZE = 400;
+const REASONABLE_CACHE_SIZE = 800;
 
 const IS_BLOCKING_NEVER = (obj: any, cb: CB<boolean>) => {
   cb(null, false);
@@ -65,6 +65,7 @@ function isUnique(uniqueRoots: Set<MsgId>) {
 }
 
 function isPublic(msg: Msg<any>): boolean {
+  if ((msg as UnboxedMsg).value.private) return false;
   return !msg.value.content || typeof msg.value.content !== 'string';
 }
 
@@ -101,7 +102,7 @@ function makeFilter(opts: FilterOpts): (msg: Msg) => boolean {
 class threads {
   private readonly ssb: Record<string, any>;
   private readonly isBlocking: (obj: any, cb: CB<boolean>) => void;
-  private readonly rootMsgCache: QuickLRU<MsgId, Msg<any>>;
+  private readonly msgCache: QuickLRU<MsgId, Msg<any>>;
   private readonly supportsPrivate: boolean;
   private readonly publicIndex: { read: CallableFunction };
   private readonly profilesIndex: { read: CallableFunction };
@@ -117,7 +118,7 @@ class threads {
     this.isBlocking = ssb.friends?.isBlocking
       ? ssb.friends.isBlocking
       : IS_BLOCKING_NEVER;
-    this.rootMsgCache = new QuickLRU({ maxSize: REASONABLE_CACHE_SIZE });
+    this.msgCache = new QuickLRU({ maxSize: REASONABLE_CACHE_SIZE });
     this.supportsPrivate = !!ssb.private?.read && !!ssb.private?.unbox;
     this.publicIndex = this.buildPublicIndex();
     this.profilesIndex = this.buildProfilesIndex();
@@ -128,18 +129,22 @@ class threads {
   private buildPublicIndex() {
     return this.ssb._flumeUse(
       'threads-public',
-      FlumeViewLevel(2, (msg: Msg, _seq: number) => [
-        ['any', getTimestamp(msg), getRootMsgId(msg)] as IndexItem,
-      ]),
+      FlumeViewLevel(2, (m: Msg, _seq: number) =>
+        isPublic(m)
+          ? [['any', getTimestamp(m), getRootMsgId(m)] as IndexItem]
+          : [],
+      ),
     );
   }
 
   private buildProfilesIndex() {
     return this.ssb._flumeUse(
       'threads-profiles',
-      FlumeViewLevel(2, (msg: Msg, _seq: number) => [
-        [msg.value.author, getTimestamp(msg), getRootMsgId(msg)] as IndexItem,
-      ]),
+      FlumeViewLevel(2, (m: Msg, _seq: number) =>
+        isPublic(m)
+          ? [[m.value.author, getTimestamp(m), getRootMsgId(m)] as IndexItem]
+          : [],
+      ),
     );
   }
 
@@ -198,6 +203,8 @@ class threads {
     };
   };
 
+  // TODO refactor: the two methods below share a lot of code in common
+
   /**
    * Returns a pull-stream operator pipeline that:
    * 1. Picks the MsgId from the source IndexItem
@@ -210,12 +217,12 @@ class threads {
       source,
       pull.asyncMap((item: IndexItem, cb: CB<Msg<any> | false>) => {
         const [, , id] = item;
-        if (this.rootMsgCache.has(id)) {
-          cb(null, this.rootMsgCache.get(id)!);
+        if (this.msgCache.has(id)) {
+          cb(null, this.msgCache.get(id)!);
         } else {
           this.ssb.get({ id, meta: true }, (err: any, msg: Msg<any>) => {
             if (err) return cb(null, false);
-            if (msg.value) this.rootMsgCache.set(id, msg);
+            if (msg.value) this.msgCache.set(id, msg);
             cb(null, msg);
           });
         }
@@ -232,12 +239,12 @@ class threads {
     pull(
       source,
       pull.asyncMap((id: MsgId, cb: CB<Msg<any>>) => {
-        if (this.rootMsgCache.has(id)) {
-          cb(null, this.rootMsgCache.get(id)!);
+        if (this.msgCache.has(id)) {
+          cb(null, this.msgCache.get(id)!);
         } else {
           this.ssb.get({ id, meta: true }, (err: any, msg: Msg<any>) => {
             if (err) return cb(err);
-            if (msg.value) this.rootMsgCache.set(id, msg);
+            if (msg.value) this.msgCache.set(id, msg);
             cb(null, msg);
           });
         }
@@ -340,6 +347,12 @@ class threads {
 
     return pull(
       this.ssb.private.read(privateOpts),
+      pull.through((msg: Msg) => this.msgCache.set(msg.key, msg)),
+      pull.map(getRootMsgId),
+      pull.filter(isUnique(new Set())),
+      this.fetchMsgFromId,
+      pull.map(this.maybeUnboxMsg),
+      pull.through((msg: Msg) => this.msgCache.delete(msg.key)),
       pull.filter(isRoot),
       this.removeMessagesFromBlocked,
       pull.filter(filter),
