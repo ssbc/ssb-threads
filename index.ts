@@ -364,6 +364,9 @@ class threads {
 
   @muxrpc('source')
   public privateUpdates = (opts: UpdatesOpts) => {
+    if (!this.supportsPrivate) {
+      throw new Error('"ssb-threads" is missing required plugin "ssb-private"');
+    }
     const filter = makeFilter(opts);
 
     return pull(
