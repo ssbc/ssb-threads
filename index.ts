@@ -1,4 +1,10 @@
 import { Msg, MsgId, UnboxedMsg } from 'ssb-typescript';
+import {
+  isPublic,
+  isPrivate,
+  isRootMsg,
+  isReplyMsgToRoot,
+} from 'ssb-typescript/utils';
 import { plugin, muxrpc } from 'secret-stack-decorators';
 import QuickLRU = require('quick-lru');
 import {
@@ -63,23 +69,6 @@ function isUnique(uniqueRoots: Set<MsgId>) {
       return true;
     }
   };
-}
-
-function isPublic(msg: Msg<any>): boolean {
-  if ((msg as UnboxedMsg).value.private) return false;
-  return !msg.value.content || typeof msg.value.content !== 'string';
-}
-
-function isPrivate(msg: Msg<any>): boolean {
-  return !isPublic(msg);
-}
-
-function isRoot(msg: Msg<any>): boolean {
-  return !msg?.value?.content?.root;
-}
-
-function isReplyToRoot(rootKey: MsgId) {
-  return (msg: Msg<{ root?: MsgId }>) => msg?.value?.content?.root === rootKey;
 }
 
 function makeAllowFilter(list: Array<string> | undefined) {
@@ -190,7 +179,7 @@ class threads {
               live: false,
               reverse: true,
             }),
-            pull.filter(isReplyToRoot(root.key)),
+            pull.filter(isReplyMsgToRoot(root.key)),
             this.removeMessagesFromBlocked,
             pull.filter(filter),
             pull.take(maxSize),
@@ -366,7 +355,7 @@ class threads {
       this.fetchMsgFromId,
       pull.map(this.maybeUnboxMsg),
       pull.through((msg: Msg) => this.msgCache.delete(msg.key)),
-      pull.filter(isRoot),
+      pull.filter(isRootMsg),
       this.removeMessagesFromBlocked,
       pull.filter(filter),
       pull.take(maxThreads),
@@ -464,7 +453,7 @@ class threads {
         reverse: false,
         private: privately,
       }),
-      pull.filter(isReplyToRoot(opts.root)),
+      pull.filter(isReplyMsgToRoot(opts.root)),
       privately ? pull.filter(isPrivate) : pull.filter(isPublic),
       this.removeMessagesFromBlocked,
       pull.filter(filter),
