@@ -70,6 +70,10 @@ function isPublic(msg: Msg<any>): boolean {
   return !msg.value.content || typeof msg.value.content !== 'string';
 }
 
+function isPrivate(msg: Msg<any>): boolean {
+  return !isPublic(msg);
+}
+
 function isRoot(msg: Msg<any>): boolean {
   return !msg?.value?.content?.root;
 }
@@ -261,16 +265,20 @@ class threads {
     return this.ssb.private?.unbox(msg);
   };
 
-  private rootToThread = (maxSize: number, filter: Filter) => {
+  private rootToThread = (
+    maxSize: number,
+    filter: Filter,
+    privately: boolean,
+  ) => {
     return pull.asyncMap((root: UnboxedMsg, cb: CB<Thread>) => {
       this.isBlocking(
         { source: this.ssb.id, dest: root.value.author },
         (err: any, blocking: boolean) => {
-          if (err) cb(err);
-          else if (blocking)
+          if (err) {
+            cb(err);
+          } else if (blocking) {
             cb(new Error('Author Blocked:' + root.value.author));
-          else {
-            const privately = root.value?.private ?? false;
+          } else {
             this.nonBlockedRootToThread(maxSize, filter, privately)(root, cb);
           }
         },
@@ -416,6 +424,10 @@ class threads {
 
   @muxrpc('source')
   public thread = (opts: ThreadOpts) => {
+    const privately = !!opts.private;
+    if (privately && !this.supportsPrivate) {
+      throw new Error('"ssb-threads" is missing required plugin "ssb-private"');
+    }
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
     const optsOk =
       !opts.allowlist && !opts.blocklist
@@ -426,13 +438,17 @@ class threads {
     return pull(
       pull.values([opts.root]),
       this.fetchMsgFromId,
-      pull.map(this.maybeUnboxMsg),
-      this.rootToThread(threadMaxSize, filterPosts),
+      privately ? pull.map(this.maybeUnboxMsg) : pull.filter(isPublic),
+      this.rootToThread(threadMaxSize, filterPosts, privately),
     );
   };
 
   @muxrpc('source')
   public threadUpdates = (opts: ThreadUpdatesOpts) => {
+    const privately = !!opts.private;
+    if (privately && !this.supportsPrivate) {
+      throw new Error('"ssb-threads" is missing required plugin "ssb-private"');
+    }
     const filter = makeFilter(opts);
 
     return pull(
@@ -440,11 +456,12 @@ class threads {
         query: [{ $filter: { dest: opts.root } }],
         index: 'DTA',
         old: false,
-        private: true,
+        private: privately,
         live: true,
         reverse: false,
       }),
       pull.filter(isReplyToRoot(opts.root)),
+      privately ? pull.filter(isPrivate) : pull.filter(isPublic),
       this.removeMessagesFromBlocked,
       pull.filter(filter),
     );

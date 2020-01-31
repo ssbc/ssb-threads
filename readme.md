@@ -96,6 +96,7 @@ Returns a pull stream that emits thread objects of public messages initiated by 
 Returns a pull stream that emits one thread object of messages under the root identified by `opts.root` (MsgId).
 
 * `opts.root`: a MsgId that identifies the root of the thread.
+* `opts.private`: optional boolean indicating that (when `true`) you want to get only private messages, or (when `false`) only public messages; **⚠️ Warning: you should only use this locally, do not allow remote peers to call `ssb.threads.thread`, you don't want them to see your encrypted messages.**
 * `opts.threadMaxSize`: optional number (default: Infinity). Dictates the maximum amount of messages in each returned thread object. Serves for previewing threads, particularly long ones.
 * `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
@@ -103,17 +104,14 @@ Returns a pull stream that emits one thread object of messages under the root id
 If `opts.allowlist` and `opts.blocklist` are not defined,
 only messages of type **post** will be returned.
 
-**If the `opts.root` is an encrypted message, this will attempt to unbox the message, and if that succeeds, then all of the replies in this thread will be also unboxed. ⚠️ Warning: this is why you should only use this method locally and not allow remote peers to call `ssb.threads.thread`, you don't want them to see your encrypted messages.**
-
 ### `ssb.threads.threadUpdates(opts)`
 
 Returns a ("live") pull stream that emits every new message which is a reply to this thread, and which passes the (optional) allowlist or blocklist.
 
 * `opts.root`: a MesgId that identifies the root of the thread.
+* `opts.private`: optional boolean indicating that (when `true`) you want to get only private messages, or (when `false`) only public messages; **⚠️ Warning: you should only use this locally, do not allow remote peers to call `ssb.threads.thread`, you don't want them to see your encrypted messages.**
 * `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
-
-**If the `opts.root` is an encrypted message, this will attempt to unbox the incoming replies. ⚠️ Warning: this is why you should only use this method locally and not allow remote peers to call `ssb.threads.threadUpdates`, you don't want them to see your encrypted messages.**
 
 ## Install
 

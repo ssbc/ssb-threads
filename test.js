@@ -742,7 +742,7 @@ test('threads.thread can be called twice consecutively (to use cache)', t => {
   );
 });
 
-test('threads.thread can view private conversations', t => {
+test('threads.thread (by default) cannot view private conversations', t => {
   const myTestSbot = CreateTestSbot({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
@@ -781,7 +781,53 @@ test('threads.thread can view private conversations', t => {
 
     pull.collect((err, threads) => {
       t.error(err, 'no error');
-      t.equals(threads.length, 1, 'one one secret thread');
+      t.equals(threads.length, 0, 'no threads arrived');
+      myTestSbot.close();
+      t.end();
+    }),
+  );
+});
+
+test('threads.thread can view private conversations given opts.private', t => {
+  const myTestSbot = CreateTestSbot({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
+    temp: true,
+    name: 'test1',
+    keys: lucyKeys,
+  });
+
+  const lucy = myTestSbot.createFeed(lucyKeys);
+  let rootKey;
+
+  pull(
+    pullAsync(cb => {
+      myTestSbot.private.publish(
+        { type: 'post', text: 'Secret thread root' },
+        [myTestSbot.id],
+        cb,
+      );
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      rootKey = rootMsg.key;
+      myTestSbot.private.publish(
+        { type: 'post', text: 'Second secret message', root: rootKey },
+        [myTestSbot.id],
+        cb,
+      );
+    }),
+    pull.asyncMap((_prevMsg, cb) => {
+      myTestSbot.private.publish(
+        { type: 'post', text: 'Third secret message', root: rootKey },
+        [myTestSbot.id],
+        cb,
+      );
+    }),
+    pull.map(() => myTestSbot.threads.thread({ root: rootKey, private: true })),
+    pull.flatten(),
+
+    pull.collect((err, threads) => {
+      t.error(err, 'no error');
+      t.equals(threads.length, 1, 'one secret thread arrived');
       const thread = threads[0];
       t.equals(thread.full, true, 'thread comes back full');
       t.equals(thread.messages.length, 3, 'thread has 3 messages');
@@ -830,6 +876,136 @@ test('threads.threadUpdates notifies of new reply to that thread', t => {
     pull.asyncMap((rootMsg, cb) => {
       t.equals(updates, 1);
       lucy.add({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, wait(cb));
+    }),
+
+    pull.drain(() => {
+      t.equals(updates, 1);
+      myTestSbot.close();
+      t.end();
+    }),
+  );
+});
+
+test('threads.threadUpdates (by default) cannot see private replies', t => {
+  const myTestSbot = CreateTestSbot({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
+    temp: true,
+    name: 'test6',
+    keys: lucyKeys,
+  });
+
+  const lucy = myTestSbot.createFeed(lucyKeys);
+  const mary = myTestSbot.createFeed(maryKeys);
+
+  let updates = 0;
+
+  pull(
+    pullAsync(cb => {
+      lucy.add(
+        ssbKeys.box({ type: 'post', text: 'A: root' }, [lucy.id, mary.id]),
+        wait(cb),
+      );
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      pull(
+        myTestSbot.threads.threadUpdates({ root: rootMsg.key }),
+        pull.drain(m => {
+          t.fail('should not get an update');
+          updates++;
+        }),
+      );
+
+      t.equals(updates, 0);
+
+      mary.add(
+        ssbKeys.box({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, [
+          lucy.id,
+          mary.id,
+        ]),
+        wait(cb),
+      );
+    }),
+    pull.asyncMap((_, cb) => {
+      t.equals(updates, 0);
+      mary.add(
+        ssbKeys.box({ type: 'post', text: 'B: root' }, [lucy.id, mary.id]),
+        wait(cb),
+      );
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      t.equals(updates, 0);
+      lucy.add(
+        ssbKeys.box({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, [
+          lucy.id,
+          mary.id,
+        ]),
+        wait(cb),
+      );
+    }),
+
+    pull.drain(() => {
+      t.equals(updates, 0);
+      myTestSbot.close();
+      t.end();
+    }),
+  );
+});
+
+test('threads.threadUpdates can view private replies given opts.private', t => {
+  const myTestSbot = CreateTestSbot({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
+    temp: true,
+    name: 'test6',
+    keys: lucyKeys,
+  });
+
+  const lucy = myTestSbot.createFeed(lucyKeys);
+  const mary = myTestSbot.createFeed(maryKeys);
+
+  let updates = 0;
+
+  pull(
+    pullAsync(cb => {
+      lucy.add(
+        ssbKeys.box({ type: 'post', text: 'A: root' }, [lucy.id, mary.id]),
+        wait(cb),
+      );
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      pull(
+        myTestSbot.threads.threadUpdates({ root: rootMsg.key, private: true }),
+        pull.drain(msg => {
+          t.equals(msg.value.content.root, rootMsg.key, 'got update');
+          updates++;
+        }),
+      );
+
+      t.equals(updates, 0);
+
+      mary.add(
+        ssbKeys.box({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, [
+          lucy.id,
+          mary.id,
+        ]),
+        wait(cb),
+      );
+    }),
+    pull.asyncMap((_, cb) => {
+      t.equals(updates, 1);
+      mary.add(
+        ssbKeys.box({ type: 'post', text: 'B: root' }, [lucy.id, mary.id]),
+        wait(cb),
+      );
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      t.equals(updates, 1);
+      lucy.add(
+        ssbKeys.box({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, [
+          lucy.id,
+          mary.id,
+        ]),
+        wait(cb),
+      );
     }),
 
     pull.drain(() => {

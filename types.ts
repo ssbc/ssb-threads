@@ -22,10 +22,14 @@ export type UpdatesOpts = {} & FilterOpts;
 
 export type ThreadOpts = {
   root: MsgId;
+  private?: boolean;
   threadMaxSize?: number;
 } & FilterOpts;
 
-export type ThreadUpdatesOpts = { root: MsgId } & FilterOpts;
+export type ThreadUpdatesOpts = {
+  root: MsgId;
+  private?: boolean;
+} & FilterOpts;
 
 export type ProfileOpts = Opts & {
   id: string;
