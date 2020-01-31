@@ -293,8 +293,8 @@ class threads {
   @muxrpc('source')
   public public = (opts: Opts) => {
     const lt = opts.lt;
-    const reverse = opts.reverse === false ? false : true;
-    const live = opts.live === true ? true : false;
+    const live = opts.live ?? false;
+    const reverse = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
     const filter = makeFilter(opts);
@@ -324,7 +324,11 @@ class threads {
     const filter = makeFilter(opts);
 
     return pull(
-      this.ssb.createFeedStream({ reverse: false, old: false, live: true }),
+      this.ssb.createFeedStream({
+        old: false,
+        live: true,
+        reverse: false,
+      }),
       pull.filter(this.isNotMine),
       pull.filter(isPublic),
       this.removeMessagesFromBlocked,
@@ -339,8 +343,8 @@ class threads {
       throw new Error('"ssb-threads" is missing required plugin "ssb-private"');
     }
     const lt = opts.lt;
-    const reverse = opts.reverse === false ? false : true;
-    const live = opts.live === true ? true : false;
+    const live = opts.live ?? false;
+    const reverse = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
     const filter = makeFilter(opts);
@@ -379,9 +383,9 @@ class threads {
 
     return pull(
       this.ssb.private.read({
+        old: false,
         live: true,
         reverse: false,
-        old: false,
         query: [{ $filter: { timestamp: { $gt: 0 } } }],
       }),
       pull.filter(this.isNotMine),
@@ -395,8 +399,8 @@ class threads {
   public profile = (opts: ProfileOpts) => {
     const id = opts.id;
     const lt = opts.lt;
-    const reverse = opts.reverse === false ? false : true;
-    const live = opts.live === true ? true : false;
+    const live = opts.live ?? false;
+    const reverse = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
     const filter = makeFilter(opts);
@@ -456,9 +460,9 @@ class threads {
         query: [{ $filter: { dest: opts.root } }],
         index: 'DTA',
         old: false,
-        private: privately,
         live: true,
         reverse: false,
+        private: privately,
       }),
       pull.filter(isReplyToRoot(opts.root)),
       privately ? pull.filter(isPrivate) : pull.filter(isPublic),
