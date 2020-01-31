@@ -59,13 +59,24 @@ function isValidIndexItem(item: Array<any>) {
   return !!item?.[2];
 }
 
-function isUnique(uniqueRoots: Set<MsgId>) {
-  return function checkIsUnique(item: IndexItem) {
+function isUniqueRootInIndexItem(uniqueRoots: Set<MsgId>) {
+  return function checkIsUnique_index(item: IndexItem) {
     const [, , rootKey] = item;
     if (uniqueRoots.has(rootKey)) {
       return false;
     } else {
       uniqueRoots.add(rootKey);
+      return true;
+    }
+  };
+}
+
+function isUniqueMsgId(uniqueRoots: Set<MsgId>) {
+  return function checkIsUnique_id(id: MsgId) {
+    if (uniqueRoots.has(id)) {
+      return false;
+    } else {
+      uniqueRoots.add(id);
       return true;
     }
   };
@@ -298,7 +309,7 @@ class threads {
         seqs: false,
       }),
       pull.filter(isValidIndexItem),
-      pull.filter(isUnique(new Set())),
+      pull.filter(isUniqueRootInIndexItem(new Set())),
       this.fetchRootMsgFromIndexItem,
       pull.filter(isPublic),
       this.removeMessagesFromBlocked,
@@ -351,7 +362,7 @@ class threads {
       this.ssb.private.read(privateOpts),
       pull.through((msg: Msg) => this.msgCache.set(msg.key, msg)),
       pull.map(getRootMsgId),
-      pull.filter(isUnique(new Set())),
+      pull.filter(isUniqueMsgId(new Set())),
       this.fetchMsgFromId,
       pull.map(this.maybeUnboxMsg),
       pull.through((msg: Msg) => this.msgCache.delete(msg.key)),
@@ -405,7 +416,7 @@ class threads {
         seqs: false,
       }),
       pull.filter(isValidIndexItem),
-      pull.filter(isUnique(new Set())),
+      pull.filter(isUniqueRootInIndexItem(new Set())),
       this.fetchRootMsgFromIndexItem,
       pull.filter(isPublic),
       this.removeMessagesFromBlocked,
