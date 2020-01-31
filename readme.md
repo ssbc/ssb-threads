@@ -72,6 +72,13 @@ Returns a pull stream that emits thread objects of private conversations.
 * `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
 
+### `ssb.threads.privateUpdates(opts)`
+
+Returns a ("live") pull stream that emits the message key (string) for thread roots every time there is a new reply or root, and that passes the (optional) allowlist or blocklist.
+
+* `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
+* `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
+
 ### `ssb.threads.profile(opts)`
 
 Returns a pull stream that emits thread objects of public messages initiated by a certain profile `id`.

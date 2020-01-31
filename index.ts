@@ -363,6 +363,24 @@ class threads {
   };
 
   @muxrpc('source')
+  public privateUpdates = (opts: UpdatesOpts) => {
+    const filter = makeFilter(opts);
+
+    return pull(
+      this.ssb.private.read({
+        live: true,
+        reverse: false,
+        old: false,
+        query: [{ $filter: { timestamp: { $gt: 0 } } }],
+      }),
+      pull.filter(this.isNotMine),
+      this.removeMessagesFromBlocked,
+      pull.filter(filter),
+      pull.map(getRootMsgId),
+    );
+  };
+
+  @muxrpc('source')
   public profile = (opts: ProfileOpts) => {
     const id = opts.id;
     const lt = opts.lt;

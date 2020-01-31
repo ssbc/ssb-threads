@@ -585,6 +585,65 @@ test('threads.private gives a simple well-formed thread', t => {
   );
 });
 
+test('threads.privateUpdates notifies of new thread or new msg', t => {
+  const myTestSbot = CreateTestSbot({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    temp: true,
+    name: 'test6',
+    keys: lucyKeys,
+  });
+
+  const lucy = myTestSbot.createFeed(lucyKeys);
+  const mary = myTestSbot.createFeed(maryKeys);
+
+  let updates = 0;
+
+  pull(
+    myTestSbot.threads.privateUpdates({}),
+    pull.drain(() => {
+      updates++;
+    }),
+  );
+
+  pull(
+    pullAsync(cb => {
+      lucy.add(
+        ssbKeys.box({ type: 'post', text: 'A: root' }, [lucy.id, mary.id]),
+        wait(cb),
+      );
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      t.equals(updates, 0);
+      const root = rootMsg.key;
+      mary.add(
+        ssbKeys.box({ type: 'post', text: 'A: 2nd', root }, [lucy.id, mary.id]),
+        wait(cb),
+      );
+    }),
+    pull.asyncMap((_, cb) => {
+      t.equals(updates, 1);
+      mary.add(
+        ssbKeys.box({ type: 'post', text: 'B: root' }, [lucy.id, mary.id]),
+        wait(cb),
+      );
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      t.equals(updates, 2);
+      const root = rootMsg.key;
+      lucy.add(
+        ssbKeys.box({ type: 'post', text: 'B: 2nd', root }, [lucy.id, mary.id]),
+        wait(cb),
+      );
+    }),
+
+    pull.drain(() => {
+      t.equals(updates, 2);
+      myTestSbot.close();
+      t.end();
+    }),
+  );
+});
+
 test('threads.thread gives one full thread', t => {
   const myTestSbot = CreateTestSbot({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
