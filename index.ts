@@ -8,6 +8,7 @@ import {
   ThreadOpts,
   UpdatesOpts,
   FilterOpts,
+  ThreadUpdatesOpts,
 } from './types';
 const pull = require('pull-stream');
 const cat = require('pull-cat');
@@ -408,6 +409,26 @@ class threads {
       this.rootToThread(threadMaxSize, filterPosts),
     );
   };
+
+  @muxrpc('source')
+  public threadUpdates = (opts: ThreadUpdatesOpts) => {
+    const filter = makeFilter(opts);
+
+    return pull(
+      this.ssb.backlinks.read({
+        query: [{ $filter: { dest: opts.root } }],
+        index: 'DTA',
+        old: false,
+        private: true,
+        live: true,
+        reverse: false,
+      }),
+      pull.filter(isReplyToRoot(opts.root)),
+      this.removeMessagesFromBlocked,
+      pull.filter(filter),
+    );
+  };
+
   //#endregion
 }
 

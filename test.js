@@ -15,6 +15,12 @@ const CreateTestSbot = require('ssb-server/index')
 const lucyKeys = ssbKeys.generate();
 const maryKeys = ssbKeys.generate();
 
+function wait(cb) {
+  return (err, data) => {
+    setTimeout(() => cb(err, data), 100);
+  };
+}
+
 test('threads.public gives a simple well-formed thread', t => {
   const myTestSbot = CreateTestSbot({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
@@ -439,12 +445,6 @@ test('threads.publicUpdates notifies of new thread or new msg', t => {
     }),
   );
 
-  function wait(cb) {
-    return (err, data) => {
-      setTimeout(() => cb(err, data), 100);
-    };
-  }
-
   pull(
     pullAsync(cb => {
       lucy.add({ type: 'post', text: 'A: root' }, wait(cb));
@@ -729,6 +729,52 @@ test('threads.thread can view private conversations', t => {
       t.equals(thread.messages[0].value.content.text, 'Secret thread root');
       t.equals(thread.messages[1].value.content.text, 'Second secret message');
       t.equals(thread.messages[2].value.content.text, 'Third secret message');
+      myTestSbot.close();
+      t.end();
+    }),
+  );
+});
+
+test('threads.threadUpdates notifies of new reply to that thread', t => {
+  const myTestSbot = CreateTestSbot({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    temp: true,
+    name: 'test6',
+    keys: lucyKeys,
+  });
+
+  const lucy = myTestSbot.createFeed(lucyKeys);
+  const mary = myTestSbot.createFeed(maryKeys);
+
+  let updates = 0;
+
+  pull(
+    pullAsync(cb => {
+      lucy.add({ type: 'post', text: 'A: root' }, wait(cb));
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      pull(
+        myTestSbot.threads.threadUpdates({ root: rootMsg.key }),
+        pull.drain(msg => {
+          t.equals(msg.value.content.root, rootMsg.key, 'got update');
+          updates++;
+        }),
+      );
+
+      t.equals(updates, 0);
+      mary.add({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, wait(cb));
+    }),
+    pull.asyncMap((_, cb) => {
+      t.equals(updates, 1);
+      mary.add({ type: 'post', text: 'B: root' }, wait(cb));
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      t.equals(updates, 1);
+      lucy.add({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, wait(cb));
+    }),
+
+    pull.drain(() => {
+      t.equals(updates, 1);
       myTestSbot.close();
       t.end();
     }),

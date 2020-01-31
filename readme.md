@@ -98,6 +98,16 @@ only messages of type **post** will be returned.
 
 **If the `opts.root` is an encrypted message, this will attempt to unbox the message, and if that succeeds, then all of the replies in this thread will be also unboxed. ⚠️ Warning: this is why you should only use this method locally and not allow remote peers to call `ssb.threads.thread`, you don't want them to see your encrypted messages.**
 
+### `ssb.threads.threadUpdates(opts)`
+
+Returns a ("live") pull stream that emits every new message which is a reply to this thread, and which passes the (optional) allowlist or blocklist.
+
+* `opts.root`: a MesgId that identifies the root of the thread.
+* `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
+* `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
+
+**If the `opts.root` is an encrypted message, this will attempt to unbox the incoming replies. ⚠️ Warning: this is why you should only use this method locally and not allow remote peers to call `ssb.threads.threadUpdates`, you don't want them to see your encrypted messages.**
+
 ## Install
 
 ```
