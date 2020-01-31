@@ -23,7 +23,7 @@ function wait(cb) {
 
 test('threads.public gives a simple well-formed thread', t => {
   const myTestSbot = CreateTestSbot({
-    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test1',
     keys: lucyKeys,
@@ -70,7 +70,7 @@ test('threads.public gives a simple well-formed thread', t => {
 
 test('threads.public can be called twice consecutively (to use cache)', t => {
   const myTestSbot = CreateTestSbot({
-    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test1',
     keys: lucyKeys,
@@ -138,7 +138,7 @@ test('threads.public can be called twice consecutively (to use cache)', t => {
 
 test('threads.public does not show any private threads', t => {
   const myTestSbot = CreateTestSbot({
-    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test1',
     keys: lucyKeys,
@@ -192,7 +192,7 @@ test('threads.public does not show any private threads', t => {
 
 test('threads.public respects threadMaxSize opt', t => {
   const myTestSbot = CreateTestSbot({
-    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test2',
     keys: lucyKeys,
@@ -236,7 +236,7 @@ test('threads.public respects threadMaxSize opt', t => {
 
 test('threads.public respects allowlist opt', t => {
   const myTestSbot = CreateTestSbot({
-    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test3',
     keys: lucyKeys,
@@ -284,7 +284,7 @@ test('threads.public respects allowlist opt', t => {
 
 test('threads.public respects blocklist opt', t => {
   const myTestSbot = CreateTestSbot({
-    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test4',
     keys: lucyKeys,
@@ -332,7 +332,7 @@ test('threads.public respects blocklist opt', t => {
 
 test('threads.public gives multiple threads', t => {
   const myTestSbot = CreateTestSbot({
-    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test5',
     keys: lucyKeys,
@@ -379,7 +379,7 @@ test('threads.public gives multiple threads', t => {
 
 test('threads.public sorts threads by recency', t => {
   const myTestSbot = CreateTestSbot({
-    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test5',
     keys: lucyKeys,
@@ -427,7 +427,7 @@ test('threads.public sorts threads by recency', t => {
 
 test('threads.publicUpdates notifies of new thread or new msg', t => {
   const myTestSbot = CreateTestSbot({
-    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test6',
     keys: lucyKeys,
@@ -472,7 +472,7 @@ test('threads.publicUpdates notifies of new thread or new msg', t => {
 
 test('threads.profile gives threads for lucy not mary', t => {
   const myTestSbot = CreateTestSbot({
-    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test1',
     keys: lucyKeys,
@@ -519,7 +519,7 @@ test('threads.profile gives threads for lucy not mary', t => {
 
 test('threads.private gives a simple well-formed thread', t => {
   const myTestSbot = CreateTestSbot({
-    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test1',
     keys: lucyKeys,
@@ -587,7 +587,7 @@ test('threads.private gives a simple well-formed thread', t => {
 
 test('threads.privateUpdates notifies of new thread or new msg', t => {
   const myTestSbot = CreateTestSbot({
-    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test6',
     keys: lucyKeys,
@@ -646,7 +646,7 @@ test('threads.privateUpdates notifies of new thread or new msg', t => {
 
 test('threads.thread gives one full thread', t => {
   const myTestSbot = CreateTestSbot({
-    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test7',
     keys: lucyKeys,
@@ -688,7 +688,7 @@ test('threads.thread gives one full thread', t => {
 
 test('threads.thread can be called twice consecutively (to use cache)', t => {
   const myTestSbot = CreateTestSbot({
-    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test7',
     keys: lucyKeys,
@@ -744,7 +744,7 @@ test('threads.thread can be called twice consecutively (to use cache)', t => {
 
 test('threads.thread can view private conversations', t => {
   const myTestSbot = CreateTestSbot({
-    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test1',
     keys: lucyKeys,
@@ -796,7 +796,7 @@ test('threads.thread can view private conversations', t => {
 
 test('threads.threadUpdates notifies of new reply to that thread', t => {
   const myTestSbot = CreateTestSbot({
-    path: fs.mkdtempSync(path.join(os.tmpdir(), 'conntest-')),
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test6',
     keys: lucyKeys,
