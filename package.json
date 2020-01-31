@@ -28,7 +28,9 @@
   },
   "devDependencies": {
     "@types/node": "^13.1.8",
+    "nyc": "^15.0.0",
     "pull-async": "1.0.0",
+    "pull-cat": "1.1.11",
     "pull-notify": "^0.1.1",
     "ssb-backlinks": "0.7.3",
     "ssb-private": "~0.2.3",
@@ -41,6 +43,7 @@
   "scripts": {
     "compile": "tsc",
     "pretest": "npm run compile",
-    "test": "tape test.js"
+    "test": "tape test.js",
+    "coverage": "nyc npm run test"
   }
 }
