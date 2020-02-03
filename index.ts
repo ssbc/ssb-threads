@@ -324,6 +324,7 @@ class threads {
   @muxrpc('source')
   public publicUpdates = (opts: UpdatesOpts) => {
     const filter = makeFilter(opts);
+    const includeSelf = opts.includeSelf ?? false;
 
     return pull(
       this.ssb.createFeedStream({
@@ -331,7 +332,7 @@ class threads {
         live: true,
         reverse: false,
       }),
-      pull.filter(this.isNotMine),
+      includeSelf ? pull.through() : pull.filter(this.isNotMine),
       pull.filter(isPublic),
       this.removeMessagesFromBlocked,
       pull.filter(filter),
@@ -384,6 +385,7 @@ class threads {
       throw new Error('"ssb-threads" is missing required plugin "ssb-private"');
     }
     const filter = makeFilter(opts);
+    const includeSelf = opts.includeSelf ?? false;
 
     return pull(
       this.ssb.private.read({
@@ -392,7 +394,7 @@ class threads {
         reverse: false,
         query: [{ $filter: { timestamp: { $gt: 0 } } }],
       }),
-      pull.filter(this.isNotMine),
+      includeSelf ? pull.through() : pull.filter(this.isNotMine),
       this.removeMessagesFromBlocked,
       pull.filter(filter),
       pull.map(getRootMsgId),

@@ -19,7 +19,9 @@ export type Opts = {
   threadMaxSize?: number;
 } & FilterOpts;
 
-export type UpdatesOpts = {} & FilterOpts;
+export type UpdatesOpts = {
+  includeSelf?: boolean;
+} & FilterOpts;
 
 export type ThreadOpts = {
   root: MsgId;
