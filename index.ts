@@ -360,6 +360,7 @@ class threads {
 
     return pull(
       this.ssb.private.read(privateOpts),
+      pull.filter((msg: any) => !msg.sync),
       pull.through((msg: Msg) => this.msgCache.set(msg.key, msg)),
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
