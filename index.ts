@@ -293,6 +293,7 @@ class threads {
   @muxrpc('source')
   public public = (opts: Opts) => {
     const lt = opts.lt;
+    const old = opts.old ?? true;
     const live = opts.live ?? false;
     const reverse = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
@@ -304,6 +305,7 @@ class threads {
         lt: ['any', lt, undefined],
         reverse,
         live,
+        old,
         keys: true,
         values: false,
         seqs: false,
@@ -343,6 +345,7 @@ class threads {
       throw new Error('"ssb-threads" is missing required plugin "ssb-private"');
     }
     const lt = opts.lt;
+    const old = opts.old ?? true;
     const live = opts.live ?? false;
     const reverse = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
@@ -350,9 +353,9 @@ class threads {
     const filter = makeFilter(opts);
 
     const privateOpts = {
-      live,
       reverse,
-      old: true,
+      live,
+      old,
       query: reverse
         ? [{ $filter: { timestamp: lt ? { $lt: lt, $gt: 0 } : { $gt: 0 } } }]
         : [{ $filter: { timestamp: lt ? { $gt: lt } : { $gt: 0 } } }],
