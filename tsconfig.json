@@ -6,6 +6,7 @@
     "declaration": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
+    "experimentalDecorators": true,
     "suppressImplicitAnyIndexErrors": true,
     "skipLibCheck": true,
     "module": "commonjs",
