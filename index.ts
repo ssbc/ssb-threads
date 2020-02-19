@@ -364,12 +364,13 @@ class threads {
 
     return pull(
       this.ssb.private.read(privateOpts),
-      pull.filter((msg: any) => !msg.sync),
+      pull.filter((msg: any) => !!msg && !msg.sync && !!msg.key),
       pull.through((msg: Msg) => this.msgCache.set(msg.key, msg)),
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
       this.fetchMsgFromId,
       pull.map(this.maybeUnboxMsg),
+      pull.filter((msg: Msg) => msg?.key),
       pull.through((msg: Msg) => this.msgCache.delete(msg.key)),
       pull.filter(isRootMsg),
       this.removeMessagesFromBlocked,
