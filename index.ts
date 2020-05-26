@@ -3,7 +3,7 @@ import {
   isPublic,
   isPrivate,
   isRootMsg,
-  isReplyMsgToRoot,
+  isIndirectReplyMsgToRoot
 } from 'ssb-typescript/utils';
 import { plugin, muxrpc } from 'secret-stack-decorators';
 import QuickLRU = require('quick-lru');
@@ -49,8 +49,12 @@ function getTimestamp(msg: Msg<any>): number {
 
 function getRootMsgId(msg: Msg<any>): MsgId {
   if (msg?.value?.content) {
+    const branch = msg.value.content.fork;
+    const fork = msg.value.content.fork;
     const root = msg.value.content.root;
-    if (Ref.isMsgId(root)) return root;
+    if (branch && Ref.isMsgId(branch)) return branch;
+    if (fork && Ref.isMsgId(fork)) return fork;
+    if (root && Ref.isMsgId(root)) return root;
   }
   return msg.key; // this msg has no root so we assume this is a root
 }
@@ -190,7 +194,7 @@ class threads {
               live: false,
               reverse: true,
             }),
-            pull.filter(isReplyMsgToRoot(root.key)),
+            pull.filter(isIndirectReplyMsgToRoot(root.key)),
             this.removeMessagesFromBlocked,
             pull.filter(filter),
             pull.take(maxSize),
@@ -471,7 +475,7 @@ class threads {
         reverse: false,
         private: privately,
       }),
-      pull.filter(isReplyMsgToRoot(opts.root)),
+      pull.filter(isIndirectReplyMsgToRoot(opts.root)),
       privately ? pull.filter(isPrivate) : pull.filter(isPublic),
       this.removeMessagesFromBlocked,
       pull.filter(filter),

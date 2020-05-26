@@ -31,10 +31,13 @@ pull(
   }),
   pull.drain(thread => {
     console.log(thread);
-    // thread is an object { messages, full } where `messages` is an
-    // array of SSB messages, and full is a boolean indicating whether
-    // `messages` array contains all of the possible messages in the
-    // thread
+    // the `thread` is an object of shape `{ messages, full }` where `messages`
+    // is an array of SSB messages, and `full` is a boolean indicating whether
+    // `messages` array contains all replies to the thread. Any message that has
+    // its `root` field or `branch` field or `fork` field pointing to the root
+    // of the thread can be included in this array, but sometimes we may omit a
+    // message if the `threadMaxSize` has been reached, in which case the
+    // `messages` array will have `length` equal to `threadMaxSize`.
   }),
 );
 ```
