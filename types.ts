@@ -5,6 +5,11 @@ export type Thread = {
   full: boolean;
 };
 
+export type ThreadSummary = {
+  root: Msg;
+  replyCount: number;
+}
+
 export type FilterOpts = {
   allowlist?: Array<string>;
   blocklist?: Array<string>;

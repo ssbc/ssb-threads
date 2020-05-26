@@ -15,6 +15,7 @@ import {
   UpdatesOpts,
   FilterOpts,
   ThreadUpdatesOpts,
+  ThreadSummary,
 } from './types';
 const pull = require('pull-stream');
 const cat = require('pull-cat');
@@ -212,6 +213,30 @@ class threads {
     };
   };
 
+  private nonBlockedRootToSummary = (
+    filter: Filter,
+    privately: boolean = false,
+  ) => {
+    return (root: Msg, cb: CB<ThreadSummary>) => {
+      pull(
+        this.ssb.backlinks.read({
+          query: [{ $filter: { dest: root.key } }],
+          index: 'DTA',
+          private: privately,
+          live: false,
+          reverse: true,
+        }),
+        pull.filter(isIndirectReplyMsgToRoot(root.key)),
+        this.removeMessagesFromBlocked,
+        pull.filter(filter),
+        pull.collect((err2: any, arr: Array<Msg>) => {
+          if (err2) return cb(err2);
+          cb(null, { root, replyCount: arr.length });
+        }),
+      );
+    };
+  };
+
   // TODO refactor: the two methods below share a lot of code in common
 
   /**
@@ -322,6 +347,36 @@ class threads {
       pull.filter(filter),
       pull.take(maxThreads),
       pull.asyncMap(this.nonBlockedRootToThread(threadMaxSize, filter)),
+    );
+  };
+
+  @muxrpc('source')
+  public publicSummary = (opts: Omit<Opts, 'threadMaxSize'>) => {
+    const lt = opts.lt;
+    const old = opts.old ?? true;
+    const live = opts.live ?? false;
+    const reverse = opts.reverse ?? true;
+    const maxThreads = opts.limit ?? Infinity;
+    const filter = makeFilter(opts);
+
+    return pull(
+      this.publicIndex.read({
+        lt: ['any', lt, undefined],
+        reverse,
+        live,
+        old,
+        keys: true,
+        values: false,
+        seqs: false,
+      }),
+      pull.filter(isValidIndexItem),
+      pull.filter(isUniqueRootInIndexItem(new Set())),
+      this.fetchRootMsgFromIndexItem,
+      pull.filter(isPublic),
+      this.removeMessagesFromBlocked,
+      pull.filter(filter),
+      pull.take(maxThreads),
+      pull.asyncMap(this.nonBlockedRootToSummary(filter)),
     );
   };
 

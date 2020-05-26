@@ -425,6 +425,45 @@ test('threads.public sorts threads by recency', t => {
   );
 });
 
+test('threads.publicSummary gives a simple well-formed summary', t => {
+  const myTestSbot = CreateTestSbot({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
+    temp: true,
+    name: 'test1',
+    keys: lucyKeys,
+  });
+
+  const lucy = myTestSbot.createFeed(lucyKeys);
+
+  pull(
+    pullAsync(cb => {
+      lucy.add({ type: 'post', text: 'Thread root' }, cb);
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      lucy.add({ type: 'post', text: 'Second message', root: rootMsg.key }, cb);
+    }),
+    pull.asyncMap((prevMsg, cb) => {
+      const rootKey = prevMsg.value.content.root;
+      lucy.add({ type: 'post', text: 'Third message', root: rootKey }, cb);
+    }),
+    pull.map(() => myTestSbot.threads.publicSummary({})),
+    pull.flatten(),
+
+    pull.collect((err, summaries) => {
+      t.error(err);
+      t.equals(summaries.length, 1, 'only one summary');
+      const summary = summaries[0];
+      t.equals(summary.replyCount, 2, 'summary counts 2 replies');
+      t.equals(summary.root.value.content.root, undefined, 'root message is root');
+      t.equals(summary.root.value.content.text, 'Thread root');
+
+      myTestSbot.close();
+      t.end();
+    }),
+  );
+});
+
+
 test('threads.publicUpdates notifies of new thread or new msg', t => {
   const myTestSbot = CreateTestSbot({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),

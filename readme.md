@@ -31,18 +31,35 @@ pull(
   }),
   pull.drain(thread => {
     console.log(thread);
-    // the `thread` is an object of shape `{ messages, full }` where `messages`
-    // is an array of SSB messages, and `full` is a boolean indicating whether
-    // `messages` array contains all replies to the thread. Any message that has
-    // its `root` field or `branch` field or `fork` field pointing to the root
-    // of the thread can be included in this array, but sometimes we may omit a
-    // message if the `threadMaxSize` has been reached, in which case the
-    // `messages` array will have `length` equal to `threadMaxSize`.
   }),
 );
 ```
 
 ## API
+
+### "Thread objects"
+
+Whenever an API returns a so-called "thread object", it refers to an object of shape `{ messages, full }` where `messages` is an array of SSB messages, and `full` is a boolean indicating whether `messages` array contains all of the possible messages in the thread. Any message that has its `root` field or `branch` field or `fork` field pointing to the root of the thread can be included in this array, but sometimes we may omit a message if the `threadMaxSize` has been reached, in which case the `messages.length` will be equal to the `threadMaxSize` option.
+
+In TypeScript:
+
+```typescript
+type Thread = {
+  messages: Array<Msg>;
+  full: boolean;
+}
+```
+
+### "Summary objects"
+
+Whenever an API returns a so-called "thread summary object", it refers to an object of shape `{ root, replyCount }` where `root` is an SSB message for the top-most post in the thread, and `replyCount` is a number indicating how many other messages (besides the root) are in the thread. In TypeScript:
+
+```typescript
+type ThreadSummary = {
+  root: Msg;
+  replyCount: number;
+}
+```
 
 ### `ssb.threads.public(opts)`
 
@@ -52,6 +69,16 @@ Returns a pull stream that emits thread objects of public messages.
 * `opts.limit`: optional number (default: Infinity). Dictates the maximum amount of
   threads this pull stream will return
 * `opts.threadMaxSize`: optional number (default: Infinity). Dictates the maximum amount of messages in each returned thread object. Serves for previewing threads, particularly long ones.
+* `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
+* `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
+
+### `ssb.threads.publicSummary(opts)`
+
+Returns a pull stream that emits summary objects of public threads.
+
+* `opts.reverse`: boolean
+* `opts.limit`: optional number (default: Infinity). Dictates the maximum amount of
+  threads this pull stream will return
 * `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
 
