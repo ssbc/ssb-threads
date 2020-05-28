@@ -139,7 +139,7 @@ class threads {
   private buildPublicIndex() {
     return this.ssb._flumeUse(
       'threads-public',
-      FlumeViewLevel(2, (m: Msg, _seq: number) =>
+      FlumeViewLevel(3, (m: Msg, _seq: number) =>
         isPublic(m)
           ? [['any', getTimestamp(m), getRootMsgId(m)] as IndexItem]
           : [],
@@ -150,7 +150,7 @@ class threads {
   private buildProfilesIndex() {
     return this.ssb._flumeUse(
       'threads-profiles',
-      FlumeViewLevel(2, (m: Msg, _seq: number) =>
+      FlumeViewLevel(3, (m: Msg, _seq: number) =>
         isPublic(m)
           ? [[m.value.author, getTimestamp(m), getRootMsgId(m)] as IndexItem]
           : [],
