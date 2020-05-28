@@ -3,7 +3,7 @@ import {
   isPublic,
   isPrivate,
   isRootMsg,
-  isIndirectReplyMsgToRoot
+  isIndirectReplyMsgToRoot,
 } from 'ssb-typescript/utils';
 import { plugin, muxrpc } from 'secret-stack-decorators';
 import QuickLRU = require('quick-lru');
@@ -85,6 +85,14 @@ function isUniqueMsgId(uniqueRoots: Set<MsgId>) {
       return true;
     }
   };
+}
+
+function hasNoBacklinks(msg: Msg<any>): boolean {
+  return (
+    !msg?.value?.content?.root &&
+    !msg?.value?.content?.branch &&
+    !msg?.value?.content?.fork
+  );
 }
 
 function makeAllowFilter(list: Array<string> | undefined) {
@@ -343,6 +351,7 @@ class threads {
       pull.filter(isUniqueRootInIndexItem(new Set())),
       this.fetchRootMsgFromIndexItem,
       pull.filter(isPublic),
+      pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
       pull.filter(filter),
       pull.take(maxThreads),
@@ -373,6 +382,7 @@ class threads {
       pull.filter(isUniqueRootInIndexItem(new Set())),
       this.fetchRootMsgFromIndexItem,
       pull.filter(isPublic),
+      pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
       pull.filter(filter),
       pull.take(maxThreads),
