@@ -3,6 +3,7 @@ import {
   isPublic,
   isPrivate,
   isRootMsg,
+  isReplyMsgToRoot,
   isIndirectReplyMsgToRoot,
 } from 'ssb-typescript/utils';
 import { plugin, muxrpc } from 'secret-stack-decorators';
@@ -203,7 +204,7 @@ class threads {
               live: false,
               reverse: true,
             }),
-            pull.filter(isIndirectReplyMsgToRoot(root.key)),
+            pull.filter(isReplyMsgToRoot(root.key)),
             this.removeMessagesFromBlocked,
             pull.filter(filter),
             pull.take(maxSize),
@@ -540,7 +541,7 @@ class threads {
         reverse: false,
         private: privately,
       }),
-      pull.filter(isIndirectReplyMsgToRoot(opts.root)),
+      pull.filter(isReplyMsgToRoot(opts.root)),
       privately ? pull.filter(isPrivate) : pull.filter(isPublic),
       this.removeMessagesFromBlocked,
       pull.filter(filter),
