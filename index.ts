@@ -1,10 +1,9 @@
-import { Msg, MsgId, UnboxedMsg } from 'ssb-typescript';
+import { Msg, MsgId, UnboxedMsg, MsgInThread } from 'ssb-typescript';
 import {
   isPublic,
   isPrivate,
   isRootMsg,
   isReplyMsgToRoot,
-  isIndirectReplyMsgToRoot,
 } from 'ssb-typescript/utils';
 import { plugin, muxrpc } from 'secret-stack-decorators';
 import QuickLRU = require('quick-lru');
@@ -31,6 +30,12 @@ type IndexItem = [
   /* timestamp */ number,
   /* root msg key */ MsgId,
 ];
+
+function isIndirectReplyMsgToRoot(rootKey: MsgId) {
+  return (msg: MsgInThread) =>
+    msg?.value?.content?.root === rootKey ||
+    msg?.value?.content?.fork === rootKey;
+}
 
 /**
  * The average SSB message in JSON is about 0.5 KB — 1.5 KB in size.
