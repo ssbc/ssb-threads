@@ -556,6 +556,46 @@ test('threads.profile gives threads for lucy not mary', t => {
   );
 });
 
+test('threads.profileSummary gives threads for lucy not mary', t => {
+  const myTestSbot = CreateTestSbot({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
+    temp: true,
+    name: 'test1',
+    keys: lucyKeys,
+  });
+
+  const lucy = myTestSbot.createFeed(lucyKeys);
+  const mary = myTestSbot.createFeed(maryKeys);
+  let rootId;
+
+  pull(
+    pullAsync(cb => {
+      lucy.add({ type: 'post', text: 'Root from lucy' }, cb);
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      rootId = rootMsg.key;
+      mary.add({ type: 'post', text: 'Root from mary' }, cb);
+    }),
+    pull.asyncMap((_, cb) => {
+      lucy.add({ type: 'post', text: 'Reply from lucy', root: rootId }, cb);
+    }),
+    pull.map(() => myTestSbot.threads.profileSummary({ id: lucy.id })),
+    pull.flatten(),
+
+    pull.collect((err, summaries) => {
+      t.error(err);
+      t.equals(summaries.length, 1, 'only one summary');
+      const summary = summaries[0];
+      t.equals(summary.replyCount, 1, 'summary counts 1 reply');
+      t.equals(summary.root.value.content.root, undefined, 'root message is root');
+      t.equals(summary.root.value.content.text, 'Root from lucy');
+
+      myTestSbot.close();
+      t.end();
+    }),
+  );
+});
+
 test('threads.private gives a simple well-formed thread', t => {
   const myTestSbot = CreateTestSbot({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),

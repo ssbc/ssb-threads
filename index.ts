@@ -509,6 +509,39 @@ class threads {
   };
 
   @muxrpc('source')
+  public profileSummary = (opts: Omit<ProfileOpts, 'threadMaxSize'>) => {
+    const id = opts.id;
+    const lt = opts.lt;
+    const old = opts.old ?? true;
+    const live = opts.live ?? false;
+    const reverse = opts.reverse ?? true;
+    const maxThreads = opts.limit ?? Infinity;
+    const filter = makeFilter(opts);
+
+    return pull(
+      this.profilesIndex.read({
+        lt: [id, lt, undefined],
+        gt: [id, null, undefined],
+        reverse,
+        live,
+        old,
+        keys: true,
+        values: false,
+        seqs: false,
+      }),
+      pull.filter(isValidIndexItem),
+      pull.filter(isUniqueRootInIndexItem(new Set())),
+      this.fetchRootMsgFromIndexItem,
+      pull.filter(isPublic),
+      pull.filter(hasNoBacklinks),
+      this.removeMessagesFromBlocked,
+      pull.filter(filter),
+      pull.take(maxThreads),
+      pull.asyncMap(this.nonBlockedRootToSummary(filter)),
+    );
+  };
+
+  @muxrpc('source')
   public thread = (opts: ThreadOpts) => {
     const privately = !!opts.private;
     if (privately && !this.supportsPrivate) {

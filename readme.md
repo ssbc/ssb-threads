@@ -123,6 +123,17 @@ Returns a pull stream that emits thread objects of public messages initiated by 
 * `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
 
+### `ssb.threads.profileSummary(opts)`
+
+Returns a pull stream that emits summary objects of public messages where the profile `id` participated in.
+
+* `opts.id`: FeedId of some SSB user.
+* `opts.reverse`: boolean
+* `opts.limit`: optional number (default: Infinity). Dictates the maximum amount of
+  threads this pull stream will return
+* `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
+* `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
+
 ### `ssb.threads.thread(opts)`
 
 Returns a pull stream that emits one thread object of messages under the root identified by `opts.root` (MsgId).
