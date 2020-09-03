@@ -8,6 +8,11 @@ export type Thread = {
 export type ThreadSummary = {
   root: Msg;
   replyCount: number;
+
+  /**
+   * Timestamp of the latest post in this thread
+   */
+  timestamp: number;
 }
 
 export type FilterOpts = {

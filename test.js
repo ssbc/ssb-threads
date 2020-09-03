@@ -454,6 +454,10 @@ test('threads.publicSummary gives a simple well-formed summary', t => {
       t.equals(summaries.length, 1, 'only one summary');
       const summary = summaries[0];
       t.equals(summary.replyCount, 2, 'summary counts 2 replies');
+      t.true(
+        summary.timestamp > summary.root.timestamp,
+        'summary timestamp greater than root timestamp'
+      );
       t.equals(summary.root.value.content.root, undefined, 'root message is root');
       t.equals(summary.root.value.content.text, 'Thread root');
 
@@ -587,6 +591,10 @@ test('threads.profileSummary gives threads for lucy not mary', t => {
       t.equals(summaries.length, 1, 'only one summary');
       const summary = summaries[0];
       t.equals(summary.replyCount, 1, 'summary counts 1 reply');
+      t.true(
+        summary.timestamp > summary.root.timestamp,
+        'summary timestamp greater than root timestamp'
+      );
       t.equals(summary.root.value.content.root, undefined, 'root message is root');
       t.equals(summary.root.value.content.text, 'Root from lucy');
 

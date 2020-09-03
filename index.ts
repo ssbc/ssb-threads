@@ -229,6 +229,7 @@ class threads {
 
   private nonBlockedRootToSummary = (
     filter: Filter,
+    timestamps: Map<MsgId, number>,
     privately: boolean = false,
   ) => {
     return (root: Msg, cb: CB<ThreadSummary>) => {
@@ -245,7 +246,8 @@ class threads {
         pull.filter(filter),
         pull.collect((err2: any, arr: Array<Msg>) => {
           if (err2) return cb(err2);
-          cb(null, { root, replyCount: arr.length });
+          const timestamp = timestamps.get(root.key) ?? root.timestamp;
+          cb(null, { root, replyCount: arr.length, timestamp });
         }),
       );
     };
@@ -373,6 +375,7 @@ class threads {
     const reverse = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const filter = makeFilter(opts);
+    const timestamps = new Map<MsgId, number>();
 
     return pull(
       this.publicIndex.read({
@@ -385,6 +388,7 @@ class threads {
         seqs: false,
       }),
       pull.filter(isValidIndexItem),
+      pull.through(([, ts, rootId]: IndexItem) => timestamps.set(rootId, ts)),
       pull.filter(isUniqueRootInIndexItem(new Set())),
       this.fetchRootMsgFromIndexItem,
       pull.filter(isPublic),
@@ -392,7 +396,7 @@ class threads {
       this.removeMessagesFromBlocked,
       pull.filter(filter),
       pull.take(maxThreads),
-      pull.asyncMap(this.nonBlockedRootToSummary(filter)),
+      pull.asyncMap(this.nonBlockedRootToSummary(filter, timestamps)),
     );
   };
 
@@ -517,6 +521,7 @@ class threads {
     const reverse = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const filter = makeFilter(opts);
+    const timestamps = new Map<MsgId, number>();
 
     return pull(
       this.profilesIndex.read({
@@ -530,6 +535,7 @@ class threads {
         seqs: false,
       }),
       pull.filter(isValidIndexItem),
+      pull.through(([, ts, rootId]: IndexItem) => timestamps.set(rootId, ts)),
       pull.filter(isUniqueRootInIndexItem(new Set())),
       this.fetchRootMsgFromIndexItem,
       pull.filter(isPublic),
@@ -537,7 +543,7 @@ class threads {
       this.removeMessagesFromBlocked,
       pull.filter(filter),
       pull.take(maxThreads),
-      pull.asyncMap(this.nonBlockedRootToSummary(filter)),
+      pull.asyncMap(this.nonBlockedRootToSummary(filter, timestamps)),
     );
   };
 
