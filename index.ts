@@ -406,7 +406,7 @@ class threads {
     const includeSelf = opts.includeSelf ?? false;
 
     return pull(
-      this.ssb.createFeedStream({
+      this.ssb.createLogStream({
         old: false,
         live: true,
         reverse: false,
