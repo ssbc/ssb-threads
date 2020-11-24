@@ -1,4 +1,4 @@
-import { Msg, MsgId, UnboxedMsg, MsgInThread } from 'ssb-typescript';
+import { Msg, MsgId, FeedId, UnboxedMsg, MsgInThread } from 'ssb-typescript';
 import {
   isPublic,
   isPrivate,
@@ -26,7 +26,7 @@ const Ref = require('ssb-ref');
 type CB<T> = (err: any, val?: T) => void;
 type Filter = (msg: Msg) => boolean;
 type IndexItem = [
-  /* prefix label */ string,
+  /* prefix label */ 'any' | FeedId,
   /* timestamp */ number,
   /* root msg key */ MsgId,
 ];
@@ -128,8 +128,7 @@ class threads {
   private readonly isBlocking: (obj: any, cb: CB<boolean>) => void;
   private readonly msgCache: QuickLRU<MsgId, Msg<any>>;
   private readonly supportsPrivate: boolean;
-  private readonly publicIndex: { read: CallableFunction };
-  private readonly profilesIndex: { read: CallableFunction };
+  private readonly index: { read: CallableFunction };
 
   constructor(ssb: Record<string, any>, _config: any) {
     if (!ssb.backlinks?.read) {
@@ -144,29 +143,20 @@ class threads {
       : IS_BLOCKING_NEVER;
     this.msgCache = new QuickLRU({ maxSize: REASONABLE_CACHE_SIZE });
     this.supportsPrivate = !!ssb.private?.read && !!ssb.private?.unbox;
-    this.publicIndex = this.buildPublicIndex();
-    this.profilesIndex = this.buildProfilesIndex();
+    this.index = this.setupIndex();
   }
 
   //#region PRIVATE
 
-  private buildPublicIndex() {
+  private setupIndex() {
     return this.ssb._flumeUse(
       'threads-public',
-      FlumeViewLevel(3, (m: Msg, _seq: number) =>
+      FlumeViewLevel(4, (m: Msg, _seq: number) =>
         isPublic(m)
-          ? [['any', getTimestamp(m), getRootMsgId(m)] as IndexItem]
-          : [],
-      ),
-    );
-  }
-
-  private buildProfilesIndex() {
-    return this.ssb._flumeUse(
-      'threads-profiles',
-      FlumeViewLevel(3, (m: Msg, _seq: number) =>
-        isPublic(m)
-          ? [[m.value.author, getTimestamp(m), getRootMsgId(m)] as IndexItem]
+          ? [
+              ['any', getTimestamp(m), getRootMsgId(m)] as IndexItem,
+              [m.value.author, getTimestamp(m), getRootMsgId(m)] as IndexItem,
+            ]
           : [],
       ),
     );
@@ -346,7 +336,7 @@ class threads {
     const filter = makeFilter(opts);
 
     return pull(
-      this.publicIndex.read({
+      this.index.read({
         lt: ['any', lt, undefined],
         reverse,
         live,
@@ -378,7 +368,7 @@ class threads {
     const timestamps = new Map<MsgId, number>();
 
     return pull(
-      this.publicIndex.read({
+      this.index.read({
         lt: ['any', lt, undefined],
         reverse,
         live,
@@ -492,7 +482,7 @@ class threads {
     const filter = makeFilter(opts);
 
     return pull(
-      this.profilesIndex.read({
+      this.index.read({
         lt: [id, lt, undefined],
         gt: [id, null, undefined],
         reverse,
@@ -524,7 +514,7 @@ class threads {
     const timestamps = new Map<MsgId, number>();
 
     return pull(
-      this.profilesIndex.read({
+      this.index.read({
         lt: [id, lt, undefined],
         gt: [id, null, undefined],
         reverse,
