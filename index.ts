@@ -60,7 +60,8 @@ function getRootMsgId(msg: Msg<any>): MsgId {
     if (fork && Ref.isMsgId(fork)) return fork;
     if (root && Ref.isMsgId(root)) return root;
   }
-  return msg.key; // this msg has no root so we assume this is a root
+  // this msg has no root so we assume this is a root
+  return msg.key;
 }
 
 function isUniqueMsgId(uniqueRoots: Set<MsgId>) {
