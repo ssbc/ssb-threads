@@ -1,8 +1,5 @@
-import { Msg, MsgId, UnboxedMsg, MsgInThread } from 'ssb-typescript';
-import {
-  isPublic as isPublicType,
-  isRootMsg,
-} from 'ssb-typescript/utils';
+import { Msg, MsgId, UnboxedMsg } from 'ssb-typescript';
+import { isPublic as isPublicType, isRootMsg } from 'ssb-typescript/utils';
 import { plugin, muxrpc } from 'secret-stack-decorators';
 import {
   Opts,
@@ -17,11 +14,13 @@ import {
 const pull = require('pull-stream');
 const cat = require('pull-cat');
 const sort = require('ssb-sort');
-const ssbKeys = require('ssb-keys')
+const ssbKeys = require('ssb-keys');
 const Ref = require('ssb-ref');
 const {
   and,
   or,
+  not,
+  type,
   author,
   descending,
   live,
@@ -33,7 +32,6 @@ const {
 } = require('ssb-db2/operators');
 
 type CB<T> = (err: any, val?: T) => void;
-type Filter = (msg: Msg) => boolean;
 
 const IS_BLOCKING_NEVER = (obj: any, cb: CB<boolean>) => {
   cb(null, false);
@@ -75,27 +73,16 @@ function hasNoBacklinks(msg: Msg<any>): boolean {
   );
 }
 
-function makeAllowFilter(list: Array<string> | undefined) {
-  return (msg: Msg) =>
-    !list ||
-    ((msg?.value?.content?.type &&
-      list.indexOf(msg.value.content.type) > -1) as boolean);
-}
-
-function makeBlockFilter(list: Array<string> | undefined) {
-  return (msg: Msg) =>
-    !list ||
-    (!(
-      msg?.value?.content?.type && list.indexOf(msg.value.content.type) > -1
-    ) as boolean);
-}
-
-// FIXME: these filters are applied after the msgs are fetched, but we could do
-// it *before*, via JITDB bitvectors
-function makeFilter(opts: FilterOpts): (msg: Msg) => boolean {
-  const passesAllowList = makeAllowFilter(opts.allowlist);
-  const passesBlockList = makeBlockFilter(opts.blocklist);
-  return (m: Msg) => passesAllowList(m) && passesBlockList(m);
+function makeFilterOperator(opts: FilterOpts): any {
+  if (opts.allowlist) {
+    const allowedTypes = opts.allowlist.map(type);
+    return or(...allowedTypes);
+  }
+  if (opts.blocklist) {
+    const blockedTypes = opts.blocklist.map((x) => not(type(x)));
+    return and(...blockedTypes);
+  }
+  return null;
 }
 
 @plugin('2.0.0')
@@ -134,7 +121,7 @@ class threads {
 
   private nonBlockedRootToThread = (
     maxSize: number,
-    filter: Filter,
+    filter: any,
     privately: boolean = false,
   ) => {
     return (root: Msg, cb: CB<Thread>) => {
@@ -143,13 +130,12 @@ class threads {
           pull.values([root]),
           pull(
             this.ssb.db.query(
-              and(hasRoot(root.key)),
+              and(hasRoot(root.key), filter),
               // FIXME: dont we need to use `privately` here?
               descending(),
               toPullStream(),
             ),
             this.removeMessagesFromBlocked,
-            pull.filter(filter),
             pull.take(maxSize),
           ),
         ]),
@@ -166,18 +152,17 @@ class threads {
   };
 
   private nonBlockedRootToSummary = (
-    filter: Filter,
+    filter: any,
     timestamps: Map<MsgId, number>,
   ) => {
     return (root: Msg, cb: CB<ThreadSummary>) => {
       pull(
         this.ssb.db.query(
-          and(or(hasRoot(root.key), hasFork(root.key))),
+          and(or(hasRoot(root.key), hasFork(root.key)), filter),
           descending(),
           toPullStream(),
         ),
         this.removeMessagesFromBlocked,
-        pull.filter(filter),
         pull.collect((err2: any, arr: Array<Msg>) => {
           if (err2) return cb(err2);
           const timestamp = timestamps.get(root.key) ?? root.timestamp;
@@ -196,20 +181,16 @@ class threads {
     pull(
       source,
       pull.asyncMap((id: MsgId, cb: CB<Msg<any>>) => {
-        this.ssb.db.getMsg(id, cb)
+        this.ssb.db.getMsg(id, cb);
       }),
     );
 
   private maybeUnboxMsg = (msg: Msg): Msg | UnboxedMsg => {
     if (typeof msg.value.content !== 'string') return msg;
-    return ssbKeys.unbox(msg, this.ssb.keys.private)
+    return ssbKeys.unbox(msg, this.ssb.keys.private);
   };
 
-  private rootToThread = (
-    maxSize: number,
-    filter: Filter,
-    privately: boolean,
-  ) => {
+  private rootToThread = (maxSize: number, filter: any, privately: boolean) => {
     return pull.asyncMap((root: UnboxedMsg, cb: CB<Thread>) => {
       this.isBlocking(
         { source: this.ssb.id, dest: root.value.author },
@@ -239,11 +220,11 @@ class threads {
     const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
-    const filter = makeFilter(opts);
+    const filter = makeFilterOperator(opts);
 
     return pull(
       this.ssb.db.query(
-        and(isPublic()),
+        and(isPublic(), filter),
         needsDescending ? descending() : null,
         needsLive ? live({ old }) : null,
         toPullStream(),
@@ -254,7 +235,6 @@ class threads {
       pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
-      pull.filter(filter),
       pull.take(maxThreads),
       pull.asyncMap(this.nonBlockedRootToThread(threadMaxSize, filter)),
     );
@@ -268,12 +248,12 @@ class threads {
     const needsLive = opts.live ?? false;
     const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
-    const filter = makeFilter(opts);
+    const filter = makeFilterOperator(opts);
     const timestamps = new Map<MsgId, number>();
 
     return pull(
       this.ssb.db.query(
-        and(isPublic()),
+        and(isPublic(), filter),
         needsDescending ? descending() : null,
         needsLive ? live({ old }) : null,
         toPullStream(),
@@ -287,7 +267,6 @@ class threads {
       pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
-      pull.filter(filter),
       pull.take(maxThreads),
       pull.asyncMap(this.nonBlockedRootToSummary(filter, timestamps)),
     );
@@ -295,19 +274,18 @@ class threads {
 
   @muxrpc('source')
   public publicUpdates = (opts: UpdatesOpts) => {
-    const filter = makeFilter(opts);
+    const filter = makeFilterOperator(opts);
     const includeSelf = opts.includeSelf ?? false;
 
     return pull(
       this.ssb.db.query(
-        and(isPublic()),
+        and(isPublic(), filter),
         live({ old: false }),
         toPullStream(),
       ),
       includeSelf ? pull.through() : pull.filter(this.isNotMine),
       pull.filter(isPublicType),
       this.removeMessagesFromBlocked,
-      pull.filter(filter),
       pull.map((msg: Msg) => msg.key),
     );
   };
@@ -321,11 +299,11 @@ class threads {
     const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
-    const filter = makeFilter(opts);
+    const filter = makeFilterOperator(opts);
 
     return pull(
       this.ssb.db.query(
-        and(isPrivate()),
+        and(isPrivate(), filter),
         needsDescending ? descending() : null,
         needsLive ? live({ old }) : null,
         toPullStream(),
@@ -336,7 +314,6 @@ class threads {
       pull.map(this.maybeUnboxMsg), // FIXME: not needed? can delete?
       pull.filter(isRootMsg),
       this.removeMessagesFromBlocked,
-      pull.filter(filter),
       pull.take(maxThreads),
       pull.asyncMap(this.nonBlockedRootToThread(threadMaxSize, filter, true)),
     );
@@ -344,18 +321,17 @@ class threads {
 
   @muxrpc('source')
   public privateUpdates = (opts: UpdatesOpts) => {
-    const filter = makeFilter(opts);
+    const filter = makeFilterOperator(opts);
     const includeSelf = opts.includeSelf ?? false;
 
     return pull(
       this.ssb.db.query(
-        and(isPrivate()),
+        and(isPrivate(), filter),
         live({ old: false }),
         toPullStream(),
       ),
       includeSelf ? pull.through() : pull.filter(this.isNotMine),
       this.removeMessagesFromBlocked,
-      pull.filter(filter),
       pull.map(getRootMsgId),
     );
   };
@@ -370,11 +346,11 @@ class threads {
     const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
-    const filter = makeFilter(opts);
+    const filter = makeFilterOperator(opts);
 
     return pull(
       this.ssb.db.query(
-        and(author(id), isPublic()),
+        and(author(id), isPublic(), filter),
         needsDescending ? descending() : null,
         needsLive ? live({ old }) : null,
         toPullStream(),
@@ -384,7 +360,6 @@ class threads {
       this.fetchMsgFromId,
       pull.filter(isPublicType),
       this.removeMessagesFromBlocked,
-      pull.filter(filter),
       pull.take(maxThreads),
       pull.asyncMap(this.nonBlockedRootToThread(threadMaxSize, filter)),
     );
@@ -399,12 +374,12 @@ class threads {
     const needsLive = opts.live ?? false;
     const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
-    const filter = makeFilter(opts);
+    const filter = makeFilterOperator(opts);
     const timestamps = new Map<MsgId, number>();
 
     return pull(
       this.ssb.db.query(
-        and(author(id), isPublic()),
+        and(author(id), isPublic(), filter),
         needsDescending ? descending() : null,
         needsLive ? live({ old }) : null,
         toPullStream(),
@@ -418,7 +393,6 @@ class threads {
       pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
-      pull.filter(filter),
       pull.take(maxThreads),
       pull.asyncMap(this.nonBlockedRootToSummary(filter, timestamps)),
     );
@@ -432,29 +406,28 @@ class threads {
       !opts.allowlist && !opts.blocklist
         ? { ...opts, allowlist: ['post'] }
         : opts;
-    const filterPosts = makeFilter(optsOk);
+    const filter = makeFilterOperator(optsOk);
 
     return pull(
       pull.values([opts.root]),
       this.fetchMsgFromId,
       privately ? pull.map(this.maybeUnboxMsg) : pull.filter(isPublicType),
-      this.rootToThread(threadMaxSize, filterPosts, privately),
+      this.rootToThread(threadMaxSize, filter, privately),
     );
   };
 
   @muxrpc('source')
   public threadUpdates = (opts: ThreadUpdatesOpts) => {
     const privately = !!opts.private;
-    const filter = makeFilter(opts);
+    const filter = makeFilterOperator(opts);
 
     return pull(
       this.ssb.db.query(
-        and(hasRoot(opts.root), privately ? isPrivate() : isPublic()),
+        and(hasRoot(opts.root), filter, privately ? isPrivate() : isPublic()),
         live({ old: false }),
         toPullStream(),
       ),
       this.removeMessagesFromBlocked,
-      pull.filter(filter),
     );
   };
 
