@@ -39,8 +39,6 @@ function isIndirectReplyMsgToRoot(rootKey: MsgId) {
     msg?.value?.content?.fork === rootKey;
 }
 
-const identityFn = (x: any) => x;
-
 const IS_BLOCKING_NEVER = (obj: any, cb: CB<boolean>) => {
   cb(null, false);
 };
@@ -254,9 +252,8 @@ class threads {
     return pull(
       this.ssb.db.query(
         and(isPublic()),
-        // FIXME: https://github.com/ssb-ngi-pointer/jitdb/issues/83
-        needsDescending ? descending() : identityFn,
-        needsLive ? live({ old }) : identityFn,
+        needsDescending ? descending() : null,
+        needsLive ? live({ old }) : null,
         toPullStream(),
       ),
       pull.map(getRootMsgId),
@@ -285,9 +282,8 @@ class threads {
     return pull(
       this.ssb.db.query(
         and(isPublic()),
-        // FIXME: https://github.com/ssb-ngi-pointer/jitdb/issues/83
-        needsDescending ? descending() : identityFn,
-        needsLive ? live({ old }) : identityFn,
+        needsDescending ? descending() : null,
+        needsLive ? live({ old }) : null,
         toPullStream(),
       ),
       pull.through((msg: Msg) =>
@@ -338,9 +334,8 @@ class threads {
     return pull(
       this.ssb.db.query(
         and(isPrivate()),
-        // FIXME: https://github.com/ssb-ngi-pointer/jitdb/issues/83
-        needsDescending ? descending() : identityFn,
-        needsLive ? live({ old }) : identityFn,
+        needsDescending ? descending() : null,
+        needsLive ? live({ old }) : null,
         toPullStream(),
       ),
       pull.map(getRootMsgId),
@@ -388,9 +383,8 @@ class threads {
     return pull(
       this.ssb.db.query(
         and(author(id), isPublic()),
-        // FIXME: https://github.com/ssb-ngi-pointer/jitdb/issues/83
-        needsDescending ? descending() : identityFn,
-        needsLive ? live({ old }) : identityFn,
+        needsDescending ? descending() : null,
+        needsLive ? live({ old }) : null,
         toPullStream(),
       ),
       pull.map(getRootMsgId),
@@ -419,9 +413,8 @@ class threads {
     return pull(
       this.ssb.db.query(
         and(author(id), isPublic()),
-        // FIXME: https://github.com/ssb-ngi-pointer/jitdb/issues/83
-        needsDescending ? descending() : identityFn,
-        needsLive ? live({ old }) : identityFn,
+        needsDescending ? descending() : null,
+        needsLive ? live({ old }) : null,
         toPullStream(),
       ),
       pull.through((msg: Msg) =>
