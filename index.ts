@@ -21,23 +21,19 @@ const ssbKeys = require('ssb-keys')
 const Ref = require('ssb-ref');
 const {
   and,
+  or,
   author,
   descending,
   live,
   isPrivate,
   isPublic,
   hasRoot,
+  hasFork,
   toPullStream,
 } = require('ssb-db2/operators');
 
 type CB<T> = (err: any, val?: T) => void;
 type Filter = (msg: Msg) => boolean;
-
-function isIndirectReplyMsgToRoot(rootKey: MsgId) {
-  return (msg: MsgInThread) =>
-    msg?.value?.content?.root === rootKey ||
-    msg?.value?.content?.fork === rootKey;
-}
 
 const IS_BLOCKING_NEVER = (obj: any, cb: CB<boolean>) => {
   cb(null, false);
@@ -51,10 +47,8 @@ function getTimestamp(msg: Msg<any>): number {
 
 function getRootMsgId(msg: Msg<any>): MsgId {
   if (msg?.value?.content) {
-    const branch = msg.value.content.fork;
     const fork = msg.value.content.fork;
     const root = msg.value.content.root;
-    if (branch && Ref.isMsgId(branch)) return branch;
     if (fork && Ref.isMsgId(fork)) return fork;
     if (root && Ref.isMsgId(root)) return root;
   }
@@ -178,12 +172,10 @@ class threads {
     return (root: Msg, cb: CB<ThreadSummary>) => {
       pull(
         this.ssb.db.query(
-          // FIXME: or(hasRoot, hasFork, hasBranch)
-          and(hasRoot(root.key)),
+          and(or(hasRoot(root.key), hasFork(root.key))),
           descending(),
           toPullStream(),
         ),
-        pull.filter(isIndirectReplyMsgToRoot(root.key)),
         this.removeMessagesFromBlocked,
         pull.filter(filter),
         pull.collect((err2: any, arr: Array<Msg>) => {
