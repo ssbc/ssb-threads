@@ -21,7 +21,6 @@ export type FilterOpts = {
 };
 
 export type Opts = {
-  lt?: number;
   limit?: number;
   old?: boolean;
   live?: boolean;

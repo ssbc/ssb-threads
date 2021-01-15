@@ -209,8 +209,6 @@ class threads {
 
   @muxrpc('source')
   public public = (opts: Opts) => {
-    // FIXME: support lt?
-    const lt = opts.lt;
     const old = opts.old ?? true;
     const needsLive = opts.live ?? false;
     const needsDescending = opts.reverse ?? true;
@@ -238,8 +236,6 @@ class threads {
 
   @muxrpc('source')
   public publicSummary = (opts: Omit<Opts, 'threadMaxSize'>) => {
-    // FIXME: support lt?
-    const lt = opts.lt;
     const old = opts.old ?? true;
     const needsLive = opts.live ?? false;
     const needsDescending = opts.reverse ?? true;
@@ -286,8 +282,6 @@ class threads {
 
   @muxrpc('source')
   public private = (opts: Opts) => {
-    // FIXME: support lt?
-    const lt = opts.lt;
     const old = opts.old ?? true;
     const needsLive = opts.live ?? false;
     const needsDescending = opts.reverse ?? true;
@@ -332,8 +326,6 @@ class threads {
   @muxrpc('source')
   public profile = (opts: ProfileOpts) => {
     const id = opts.id;
-    // FIXME: support lt?
-    const lt = opts.lt;
     const old = opts.old ?? true;
     const needsLive = opts.live ?? false;
     const needsDescending = opts.reverse ?? true;
@@ -361,8 +353,6 @@ class threads {
   @muxrpc('source')
   public profileSummary = (opts: Omit<ProfileOpts, 'threadMaxSize'>) => {
     const id = opts.id;
-    // FIXME: support lt
-    const lt = opts.lt;
     const old = opts.old ?? true;
     const needsLive = opts.live ?? false;
     const needsDescending = opts.reverse ?? true;
