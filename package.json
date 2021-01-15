@@ -17,14 +17,16 @@
     "node": ">=8"
   },
   "dependencies": {
-    "flumeview-level": "~3.0.14",
     "pull-cat": "^1.1.11",
     "pull-stream": "^3.6.2",
-    "quick-lru": "~4.0.1",
     "secret-stack-decorators": "1.0.0",
     "ssb-ref": "^2.11.0",
     "ssb-sort": "1.1.x",
     "ssb-typescript": "~2.2.0"
+  },
+  "peerDependencies": {
+    "ssb-db2": ">=0.20.0",
+    "ssb-keys": ">=7"
   },
   "devDependencies": {
     "@types/node": "^13.1.8",
@@ -33,10 +35,13 @@
     "pull-async": "1.0.0",
     "pull-cat": "1.1.11",
     "pull-notify": "^0.1.1",
+    "secret-stack": "6.3.1",
     "ssb-backlinks": "0.7.3",
+    "ssb-caps": "^1.1.0",
+    "ssb-db2": "^0.20.0",
     "ssb-keys": "7.2.0",
     "ssb-private": "~0.2.3",
-    "ssb-server": "~15.2.0",
+    "ssb-validate": "^4.1.3",
     "tape": "4.13.0",
     "ts-node": "^8.6.2",
     "typescript": "~3.7.5"

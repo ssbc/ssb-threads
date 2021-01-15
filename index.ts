@@ -1,12 +1,9 @@
-import { Msg, MsgId, FeedId, UnboxedMsg, MsgInThread } from 'ssb-typescript';
+import { Msg, MsgId, UnboxedMsg, MsgInThread } from 'ssb-typescript';
 import {
-  isPublic,
-  isPrivate,
+  isPublic as isPublicType,
   isRootMsg,
-  isReplyMsgToRoot,
 } from 'ssb-typescript/utils';
 import { plugin, muxrpc } from 'secret-stack-decorators';
-import QuickLRU = require('quick-lru');
 import {
   Opts,
   Thread,
@@ -19,17 +16,22 @@ import {
 } from './types';
 const pull = require('pull-stream');
 const cat = require('pull-cat');
-const FlumeViewLevel = require('flumeview-level');
 const sort = require('ssb-sort');
+const ssbKeys = require('ssb-keys')
 const Ref = require('ssb-ref');
+const {
+  and,
+  author,
+  descending,
+  live,
+  isPrivate,
+  isPublic,
+  hasRoot,
+  toPullStream,
+} = require('ssb-db2/operators');
 
 type CB<T> = (err: any, val?: T) => void;
 type Filter = (msg: Msg) => boolean;
-type IndexItem = [
-  /* prefix label */ 'any' | FeedId,
-  /* timestamp */ number,
-  /* root msg key */ MsgId,
-];
 
 function isIndirectReplyMsgToRoot(rootKey: MsgId) {
   return (msg: MsgInThread) =>
@@ -37,12 +39,7 @@ function isIndirectReplyMsgToRoot(rootKey: MsgId) {
     msg?.value?.content?.fork === rootKey;
 }
 
-/**
- * The average SSB message in JSON is about 0.5 KB — 1.5 KB in size.
- * 800 of these are then roughly 1 MB. This should be a reasonable
- * cost in RAM for the added benefit of lookup speed for 2010+ hardware.
- */
-const REASONABLE_CACHE_SIZE = 800;
+const identityFn = (x: any) => x;
 
 const IS_BLOCKING_NEVER = (obj: any, cb: CB<boolean>) => {
   cb(null, false);
@@ -64,22 +61,6 @@ function getRootMsgId(msg: Msg<any>): MsgId {
     if (root && Ref.isMsgId(root)) return root;
   }
   return msg.key; // this msg has no root so we assume this is a root
-}
-
-function isValidIndexItem(item: Array<any>) {
-  return !!item?.[2];
-}
-
-function isUniqueRootInIndexItem(uniqueRoots: Set<MsgId>) {
-  return function checkIsUnique_index(item: IndexItem) {
-    const [, , rootKey] = item;
-    if (uniqueRoots.has(rootKey)) {
-      return false;
-    } else {
-      uniqueRoots.add(rootKey);
-      return true;
-    }
-  };
 }
 
 function isUniqueMsgId(uniqueRoots: Set<MsgId>) {
@@ -116,6 +97,8 @@ function makeBlockFilter(list: Array<string> | undefined) {
     ) as boolean);
 }
 
+// FIXME: these filters are applied after the msgs are fetched, but we could do
+// it *before*, via JITDB bitvectors
 function makeFilter(opts: FilterOpts): (msg: Msg) => boolean {
   const passesAllowList = makeAllowFilter(opts.allowlist);
   const passesBlockList = makeBlockFilter(opts.blocklist);
@@ -126,41 +109,15 @@ function makeFilter(opts: FilterOpts): (msg: Msg) => boolean {
 class threads {
   private readonly ssb: Record<string, any>;
   private readonly isBlocking: (obj: any, cb: CB<boolean>) => void;
-  private readonly msgCache: QuickLRU<MsgId, Msg<any>>;
-  private readonly supportsPrivate: boolean;
-  private readonly index: { read: CallableFunction };
 
   constructor(ssb: Record<string, any>, _config: any) {
-    if (!ssb.backlinks?.read) {
-      throw new Error(
-        '"ssb-threads" is missing required plugin "ssb-backlinks"',
-      );
-    }
-
     this.ssb = ssb;
     this.isBlocking = ssb.friends?.isBlocking
       ? ssb.friends.isBlocking
       : IS_BLOCKING_NEVER;
-    this.msgCache = new QuickLRU({ maxSize: REASONABLE_CACHE_SIZE });
-    this.supportsPrivate = !!ssb.private?.read && !!ssb.private?.unbox;
-    this.index = this.setupIndex();
   }
 
   //#region PRIVATE
-
-  private setupIndex() {
-    return this.ssb._flumeUse(
-      'threads-public',
-      FlumeViewLevel(4, (m: Msg, _seq: number) =>
-        isPublic(m)
-          ? [
-              ['any', getTimestamp(m), getRootMsgId(m)] as IndexItem,
-              [m.value.author, getTimestamp(m), getRootMsgId(m)] as IndexItem,
-            ]
-          : [],
-      ),
-    );
-  }
 
   private isNotMine = (msg: Msg<any>): boolean => {
     return msg?.value?.author !== this.ssb.id;
@@ -192,14 +149,12 @@ class threads {
         cat([
           pull.values([root]),
           pull(
-            this.ssb.backlinks.read({
-              query: [{ $filter: { dest: root.key } }],
-              index: 'DTA',
-              private: privately,
-              live: false,
-              reverse: true,
-            }),
-            pull.filter(isReplyMsgToRoot(root.key)),
+            this.ssb.db.query(
+              and(hasRoot(root.key)),
+              // FIXME: dont we need to use `privately` here?
+              descending(),
+              toPullStream(),
+            ),
             this.removeMessagesFromBlocked,
             pull.filter(filter),
             pull.take(maxSize),
@@ -220,17 +175,15 @@ class threads {
   private nonBlockedRootToSummary = (
     filter: Filter,
     timestamps: Map<MsgId, number>,
-    privately: boolean = false,
   ) => {
     return (root: Msg, cb: CB<ThreadSummary>) => {
       pull(
-        this.ssb.backlinks.read({
-          query: [{ $filter: { dest: root.key } }],
-          index: 'DTA',
-          private: privately,
-          live: false,
-          reverse: true,
-        }),
+        this.ssb.db.query(
+          // FIXME: or(hasRoot, hasFork, hasBranch)
+          and(hasRoot(root.key)),
+          descending(),
+          toPullStream(),
+        ),
         pull.filter(isIndirectReplyMsgToRoot(root.key)),
         this.removeMessagesFromBlocked,
         pull.filter(filter),
@@ -243,33 +196,6 @@ class threads {
     };
   };
 
-  // TODO refactor: the two methods below share a lot of code in common
-
-  /**
-   * Returns a pull-stream operator pipeline that:
-   * 1. Picks the MsgId from the source IndexItem
-   * 2. Checks if there is a Msg in the cache for that id, and returns that
-   * 3. If not in the cache, do a database lookup
-   * 4. If an error occurs when looking up the database, ignore the error
-   */
-  private fetchRootMsgFromIndexItem = (source: any) =>
-    pull(
-      source,
-      pull.asyncMap((item: IndexItem, cb: CB<Msg<any> | false>) => {
-        const [, , id] = item;
-        if (this.msgCache.has(id)) {
-          cb(null, this.msgCache.get(id)!);
-        } else {
-          this.ssb.get({ id, meta: true }, (err: any, msg: Msg<any>) => {
-            if (err) return cb(null, false);
-            if (msg.value) this.msgCache.set(id, msg);
-            cb(null, msg);
-          });
-        }
-      }),
-      pull.filter((x: Msg | false) => x !== false),
-    );
-
   /**
    * Returns a pull-stream operator that:
    * 1. Checks if there is a Msg in the cache for the source MsgId
@@ -279,25 +205,13 @@ class threads {
     pull(
       source,
       pull.asyncMap((id: MsgId, cb: CB<Msg<any>>) => {
-        if (this.msgCache.has(id)) {
-          cb(null, this.msgCache.get(id)!);
-        } else {
-          this.ssb.get({ id, meta: true }, (err: any, msg: Msg<any>) => {
-            if (err) return cb(err);
-            if (msg.value) this.msgCache.set(id, msg);
-            cb(null, msg);
-          });
-        }
+        this.ssb.db.getMsg(id, cb)
       }),
     );
 
   private maybeUnboxMsg = (msg: Msg): Msg | UnboxedMsg => {
     if (typeof msg.value.content !== 'string') return msg;
-    if (!this.supportsPrivate) {
-      throw new Error('"ssb-threads" is missing required plugin "ssb-private"');
-    }
-
-    return this.ssb.private?.unbox(msg);
+    return ssbKeys.unbox(msg, this.ssb.keys.private)
   };
 
   private rootToThread = (
@@ -327,28 +241,27 @@ class threads {
 
   @muxrpc('source')
   public public = (opts: Opts) => {
+    // FIXME: support lt?
     const lt = opts.lt;
     const old = opts.old ?? true;
-    const live = opts.live ?? false;
-    const reverse = opts.reverse ?? true;
+    const needsLive = opts.live ?? false;
+    const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
     const filter = makeFilter(opts);
 
     return pull(
-      this.index.read({
-        lt: ['any', lt, undefined],
-        reverse,
-        live,
-        old,
-        keys: true,
-        values: false,
-        seqs: false,
-      }),
-      pull.filter(isValidIndexItem),
-      pull.filter(isUniqueRootInIndexItem(new Set())),
-      this.fetchRootMsgFromIndexItem,
-      pull.filter(isPublic),
+      this.ssb.db.query(
+        and(isPublic()),
+        // FIXME: https://github.com/ssb-ngi-pointer/jitdb/issues/83
+        needsDescending ? descending() : identityFn,
+        needsLive ? live({ old }) : identityFn,
+        toPullStream(),
+      ),
+      pull.map(getRootMsgId),
+      pull.filter(isUniqueMsgId(new Set())),
+      this.fetchMsgFromId,
+      pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
       pull.filter(filter),
@@ -359,29 +272,30 @@ class threads {
 
   @muxrpc('source')
   public publicSummary = (opts: Omit<Opts, 'threadMaxSize'>) => {
+    // FIXME: support lt?
     const lt = opts.lt;
     const old = opts.old ?? true;
-    const live = opts.live ?? false;
-    const reverse = opts.reverse ?? true;
+    const needsLive = opts.live ?? false;
+    const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const filter = makeFilter(opts);
     const timestamps = new Map<MsgId, number>();
 
     return pull(
-      this.index.read({
-        lt: ['any', lt, undefined],
-        reverse,
-        live,
-        old,
-        keys: true,
-        values: false,
-        seqs: false,
-      }),
-      pull.filter(isValidIndexItem),
-      pull.through(([, ts, rootId]: IndexItem) => timestamps.set(rootId, ts)),
-      pull.filter(isUniqueRootInIndexItem(new Set())),
-      this.fetchRootMsgFromIndexItem,
-      pull.filter(isPublic),
+      this.ssb.db.query(
+        and(isPublic()),
+        // FIXME: https://github.com/ssb-ngi-pointer/jitdb/issues/83
+        needsDescending ? descending() : identityFn,
+        needsLive ? live({ old }) : identityFn,
+        toPullStream(),
+      ),
+      pull.through((msg: Msg) =>
+        timestamps.set(getRootMsgId(msg), getTimestamp(msg)),
+      ),
+      pull.map(getRootMsgId),
+      pull.filter(isUniqueMsgId(new Set())),
+      this.fetchMsgFromId,
+      pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
       pull.filter(filter),
@@ -396,13 +310,13 @@ class threads {
     const includeSelf = opts.includeSelf ?? false;
 
     return pull(
-      this.ssb.createLogStream({
-        old: false,
-        live: true,
-        reverse: false,
-      }),
+      this.ssb.db.query(
+        and(isPublic()),
+        live({ old: false }),
+        toPullStream(),
+      ),
       includeSelf ? pull.through() : pull.filter(this.isNotMine),
-      pull.filter(isPublic),
+      pull.filter(isPublicType),
       this.removeMessagesFromBlocked,
       pull.filter(filter),
       pull.map((msg: Msg) => msg.key),
@@ -411,36 +325,27 @@ class threads {
 
   @muxrpc('source')
   public private = (opts: Opts) => {
-    if (!this.supportsPrivate) {
-      throw new Error('"ssb-threads" is missing required plugin "ssb-private"');
-    }
+    // FIXME: support lt?
     const lt = opts.lt;
     const old = opts.old ?? true;
-    const live = opts.live ?? false;
-    const reverse = opts.reverse ?? true;
+    const needsLive = opts.live ?? false;
+    const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
     const filter = makeFilter(opts);
 
-    const privateOpts = {
-      reverse,
-      live,
-      old,
-      query: reverse
-        ? [{ $filter: { timestamp: lt ? { $lt: lt, $gt: 0 } : { $gt: 0 } } }]
-        : [{ $filter: { timestamp: lt ? { $gt: lt } : { $gt: 0 } } }],
-    };
-
     return pull(
-      this.ssb.private.read(privateOpts),
-      pull.filter((msg: any) => !!msg && !msg.sync && !!msg.key),
-      pull.through((msg: Msg) => this.msgCache.set(msg.key, msg)),
+      this.ssb.db.query(
+        and(isPrivate()),
+        // FIXME: https://github.com/ssb-ngi-pointer/jitdb/issues/83
+        needsDescending ? descending() : identityFn,
+        needsLive ? live({ old }) : identityFn,
+        toPullStream(),
+      ),
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
       this.fetchMsgFromId,
-      pull.map(this.maybeUnboxMsg),
-      pull.filter((msg: Msg) => msg?.key),
-      pull.through((msg: Msg) => this.msgCache.delete(msg.key)),
+      pull.map(this.maybeUnboxMsg), // FIXME: not needed? can delete?
       pull.filter(isRootMsg),
       this.removeMessagesFromBlocked,
       pull.filter(filter),
@@ -451,19 +356,15 @@ class threads {
 
   @muxrpc('source')
   public privateUpdates = (opts: UpdatesOpts) => {
-    if (!this.supportsPrivate) {
-      throw new Error('"ssb-threads" is missing required plugin "ssb-private"');
-    }
     const filter = makeFilter(opts);
     const includeSelf = opts.includeSelf ?? false;
 
     return pull(
-      this.ssb.private.read({
-        old: false,
-        live: true,
-        reverse: false,
-        query: [{ $filter: { timestamp: { $gt: 0 } } }],
-      }),
+      this.ssb.db.query(
+        and(isPrivate()),
+        live({ old: false }),
+        toPullStream(),
+      ),
       includeSelf ? pull.through() : pull.filter(this.isNotMine),
       this.removeMessagesFromBlocked,
       pull.filter(filter),
@@ -474,27 +375,27 @@ class threads {
   @muxrpc('source')
   public profile = (opts: ProfileOpts) => {
     const id = opts.id;
+    // FIXME: support lt?
     const lt = opts.lt;
-    const live = opts.live ?? false;
-    const reverse = opts.reverse ?? true;
+    const old = opts.old ?? true;
+    const needsLive = opts.live ?? false;
+    const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
     const filter = makeFilter(opts);
 
     return pull(
-      this.index.read({
-        lt: [id, lt, undefined],
-        gt: [id, null, undefined],
-        reverse,
-        live,
-        keys: true,
-        values: false,
-        seqs: false,
-      }),
-      pull.filter(isValidIndexItem),
-      pull.filter(isUniqueRootInIndexItem(new Set())),
-      this.fetchRootMsgFromIndexItem,
-      pull.filter(isPublic),
+      this.ssb.db.query(
+        and(author(id), isPublic()),
+        // FIXME: https://github.com/ssb-ngi-pointer/jitdb/issues/83
+        needsDescending ? descending() : identityFn,
+        needsLive ? live({ old }) : identityFn,
+        toPullStream(),
+      ),
+      pull.map(getRootMsgId),
+      pull.filter(isUniqueMsgId(new Set())),
+      this.fetchMsgFromId,
+      pull.filter(isPublicType),
       this.removeMessagesFromBlocked,
       pull.filter(filter),
       pull.take(maxThreads),
@@ -505,30 +406,30 @@ class threads {
   @muxrpc('source')
   public profileSummary = (opts: Omit<ProfileOpts, 'threadMaxSize'>) => {
     const id = opts.id;
+    // FIXME: support lt
     const lt = opts.lt;
     const old = opts.old ?? true;
-    const live = opts.live ?? false;
-    const reverse = opts.reverse ?? true;
+    const needsLive = opts.live ?? false;
+    const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const filter = makeFilter(opts);
     const timestamps = new Map<MsgId, number>();
 
     return pull(
-      this.index.read({
-        lt: [id, lt, undefined],
-        gt: [id, null, undefined],
-        reverse,
-        live,
-        old,
-        keys: true,
-        values: false,
-        seqs: false,
-      }),
-      pull.filter(isValidIndexItem),
-      pull.through(([, ts, rootId]: IndexItem) => timestamps.set(rootId, ts)),
-      pull.filter(isUniqueRootInIndexItem(new Set())),
-      this.fetchRootMsgFromIndexItem,
-      pull.filter(isPublic),
+      this.ssb.db.query(
+        and(author(id), isPublic()),
+        // FIXME: https://github.com/ssb-ngi-pointer/jitdb/issues/83
+        needsDescending ? descending() : identityFn,
+        needsLive ? live({ old }) : identityFn,
+        toPullStream(),
+      ),
+      pull.through((msg: Msg) =>
+        timestamps.set(getRootMsgId(msg), getTimestamp(msg)),
+      ),
+      pull.map(getRootMsgId),
+      pull.filter(isUniqueMsgId(new Set())),
+      this.fetchMsgFromId,
+      pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
       pull.filter(filter),
@@ -540,9 +441,6 @@ class threads {
   @muxrpc('source')
   public thread = (opts: ThreadOpts) => {
     const privately = !!opts.private;
-    if (privately && !this.supportsPrivate) {
-      throw new Error('"ssb-threads" is missing required plugin "ssb-private"');
-    }
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
     const optsOk =
       !opts.allowlist && !opts.blocklist
@@ -553,7 +451,7 @@ class threads {
     return pull(
       pull.values([opts.root]),
       this.fetchMsgFromId,
-      privately ? pull.map(this.maybeUnboxMsg) : pull.filter(isPublic),
+      privately ? pull.map(this.maybeUnboxMsg) : pull.filter(isPublicType),
       this.rootToThread(threadMaxSize, filterPosts, privately),
     );
   };
@@ -561,22 +459,14 @@ class threads {
   @muxrpc('source')
   public threadUpdates = (opts: ThreadUpdatesOpts) => {
     const privately = !!opts.private;
-    if (privately && !this.supportsPrivate) {
-      throw new Error('"ssb-threads" is missing required plugin "ssb-private"');
-    }
     const filter = makeFilter(opts);
 
     return pull(
-      this.ssb.backlinks.read({
-        query: [{ $filter: { dest: opts.root } }],
-        index: 'DTA',
-        old: false,
-        live: true,
-        reverse: false,
-        private: privately,
-      }),
-      pull.filter(isReplyMsgToRoot(opts.root)),
-      privately ? pull.filter(isPrivate) : pull.filter(isPublic),
+      this.ssb.db.query(
+        and(hasRoot(opts.root), privately ? isPrivate() : isPublic()),
+        live({ old: false }),
+        toPullStream(),
+      ),
       this.removeMessagesFromBlocked,
       pull.filter(filter),
     );

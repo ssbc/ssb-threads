@@ -4,12 +4,14 @@ const path = require('path');
 const test = require('tape');
 const pull = require('pull-stream');
 const ssbKeys = require('ssb-keys');
+const SecretStack = require('secret-stack');
+const caps = require('ssb-caps');
+const validate = require('ssb-validate');
 const pullAsync = require('pull-async');
 const cat = require('pull-cat');
 
-const CreateTestSbot = require('ssb-server/index')
-  .use(require('ssb-backlinks'))
-  .use(require('ssb-private'))
+const CreateSSB = SecretStack({ appKey: caps.shs })
+  .use(require('ssb-db2'))
   .use(require('./lib/index'));
 
 const lucyKeys = ssbKeys.generate();
@@ -17,32 +19,53 @@ const maryKeys = ssbKeys.generate();
 
 function wait(cb) {
   return (err, data) => {
-    setTimeout(() => cb(err, data), 100);
+    setTimeout(() => cb(err, data), 300);
   };
 }
 
 test('threads.public gives a simple well-formed thread', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test1',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
+  let state = validate.initial();
+
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    { type: 'post', text: 'Thread root' },
+    Date.now(),
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    { type: 'post', text: 'Second message', root: state.queue[0].key },
+    Date.now() + 1,
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    { type: 'post', text: 'Third message', root: state.queue[0].key },
+    Date.now() + 2,
+  );
 
   pull(
     pullAsync((cb) => {
-      lucy.add({ type: 'post', text: 'Thread root' }, cb);
+      ssb.db.add(state.queue[0].value, cb);
     }),
-    pull.asyncMap((rootMsg, cb) => {
-      lucy.add({ type: 'post', text: 'Second message', root: rootMsg.key }, cb);
+    pull.asyncMap((_, cb) => {
+      ssb.db.add(state.queue[1].value, cb);
     }),
-    pull.asyncMap((prevMsg, cb) => {
-      const rootKey = prevMsg.value.content.root;
-      lucy.add({ type: 'post', text: 'Third message', root: rootKey }, cb);
+    pull.asyncMap((_, cb) => {
+      ssb.db.add(state.queue[2].value, cb);
     }),
-    pull.map(() => myTestSbot.threads.public({})),
+    pull.map(() => ssb.threads.public({})),
     pull.flatten(),
 
     pull.collect((err, threads) => {
@@ -62,36 +85,37 @@ test('threads.public gives a simple well-formed thread', (t) => {
 
       t.equals(msgs[2].value.content.root, rootKey, '3rd message is not root');
       t.equals(msgs[2].value.content.text, 'Third message');
-      myTestSbot.close();
-      t.end();
+      ssb.close(t.end);
     }),
   );
 });
 
 test('threads.public can be called twice consecutively (to use cache)', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test1',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
-
   pull(
     pullAsync((cb) => {
-      lucy.add({ type: 'post', text: 'Thread root' }, cb);
+      ssb.db.publish({ type: 'post', text: 'Thread root' }, cb);
     }),
     pull.asyncMap((rootMsg, cb) => {
-      lucy.add({ type: 'post', text: 'Second message', root: rootMsg.key }, cb);
+      ssb.db.publish(
+        { type: 'post', text: 'Second message', root: rootMsg.key },
+        cb,
+      );
     }),
     pull.asyncMap((prevMsg, cb) => {
       const rootKey = prevMsg.value.content.root;
-      lucy.add({ type: 'post', text: 'Third message', root: rootKey }, cb);
+      ssb.db.publish(
+        { type: 'post', text: 'Third message', root: rootKey },
+        cb,
+      );
     }),
-    pull.map(() =>
-      cat([myTestSbot.threads.public({}), myTestSbot.threads.public({})]),
-    ),
+    pull.map(() => cat([ssb.threads.public({}), ssb.threads.public({})])),
     pull.flatten(),
 
     pull.collect((err, threads) => {
@@ -130,41 +154,43 @@ test('threads.public can be called twice consecutively (to use cache)', (t) => {
 
       t.equals(msgs2[2].value.content.root, root2, '3rd message is not root');
       t.equals(msgs2[2].value.content.text, 'Third message');
-      myTestSbot.close();
-      t.end();
+      ssb.close(t.end);
     }),
   );
 });
 
 test('threads.public does not show any private threads', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test1',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
-
   pull(
     pullAsync((cb) => {
-      myTestSbot.private.publish(
-        { type: 'post', text: 'Secret thread root' },
-        [myTestSbot.id],
+      ssb.db.publish(
+        ssbKeys.box({ type: 'post', text: 'Secret thread root' }, [ssb.id]),
         cb,
       );
     }),
     pull.asyncMap((_, cb) => {
-      lucy.add({ type: 'post', text: 'Thread root' }, cb);
+      ssb.db.publish({ type: 'post', text: 'Thread root' }, cb);
     }),
     pull.asyncMap((rootMsg, cb) => {
-      lucy.add({ type: 'post', text: 'Second message', root: rootMsg.key }, cb);
+      ssb.db.publish(
+        { type: 'post', text: 'Second message', root: rootMsg.key },
+        cb,
+      );
     }),
     pull.asyncMap((prevMsg, cb) => {
       const rootKey = prevMsg.value.content.root;
-      lucy.add({ type: 'post', text: 'Third message', root: rootKey }, cb);
+      ssb.db.publish(
+        { type: 'post', text: 'Third message', root: rootKey },
+        cb,
+      );
     }),
-    pull.map(() => myTestSbot.threads.public({})),
+    pull.map(() => ssb.threads.public({})),
     pull.flatten(),
 
     pull.collect((err, threads) => {
@@ -184,34 +210,37 @@ test('threads.public does not show any private threads', (t) => {
 
       t.equals(msgs[2].value.content.root, rootKey, '3rd message is not root');
       t.equals(msgs[2].value.content.text, 'Third message');
-      myTestSbot.close();
-      t.end();
+      ssb.close(t.end);
     }),
   );
 });
 
 test('threads.public respects threadMaxSize opt', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test2',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
-
   pull(
     pullAsync((cb) => {
-      lucy.add({ type: 'post', text: 'Thread root' }, cb);
+      ssb.db.publish({ type: 'post', text: 'Thread root' }, cb);
     }),
     pull.asyncMap((rootMsg, cb) => {
-      lucy.add({ type: 'post', text: 'Second message', root: rootMsg.key }, cb);
+      ssb.db.publish(
+        { type: 'post', text: 'Second message', root: rootMsg.key },
+        cb,
+      );
     }),
     pull.asyncMap((prevMsg, cb) => {
       const rootKey = prevMsg.value.content.root;
-      lucy.add({ type: 'post', text: 'Third message', root: rootKey }, cb);
+      ssb.db.publish(
+        { type: 'post', text: 'Third message', root: rootKey },
+        cb,
+      );
     }),
-    pull.map(() => myTestSbot.threads.public({ threadMaxSize: 2 })),
+    pull.map(() => ssb.threads.public({ threadMaxSize: 2 })),
     pull.flatten(),
 
     pull.collect((err, threads) => {
@@ -228,28 +257,26 @@ test('threads.public respects threadMaxSize opt', (t) => {
 
       t.equals(msgs[1].value.content.root, rootKey, '2nd message is not root');
       t.equals(msgs[1].value.content.text, 'Third message');
-      myTestSbot.close();
+      ssb.close();
       t.end();
     }),
   );
 });
 
 test('threads.public respects allowlist opt', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test3',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
-
   pull(
     pullAsync((cb) => {
-      lucy.add({ type: 'post', text: 'Thread root' }, cb);
+      ssb.db.publish({ type: 'post', text: 'Thread root' }, cb);
     }),
     pull.asyncMap((rootMsg, cb) => {
-      lucy.add(
+      ssb.db.publish(
         {
           type: 'vote',
           vote: {
@@ -262,9 +289,9 @@ test('threads.public respects allowlist opt', (t) => {
       );
     }),
     pull.asyncMap((_prevMsg, cb) => {
-      lucy.add({ type: 'shout', text: 'AAAHHH' }, cb);
+      ssb.db.publish({ type: 'shout', text: 'AAAHHH' }, cb);
     }),
-    pull.map(() => myTestSbot.threads.public({ allowlist: ['shout'] })),
+    pull.map(() => ssb.threads.public({ allowlist: ['shout'] })),
     pull.flatten(),
 
     pull.collect((err, threads) => {
@@ -276,28 +303,26 @@ test('threads.public respects allowlist opt', (t) => {
       const msgs = thread.messages;
       t.equals(msgs[0].value.content.root, undefined, '1st message is root');
       t.equals(msgs[0].value.content.text, 'AAAHHH');
-      myTestSbot.close();
+      ssb.close();
       t.end();
     }),
   );
 });
 
 test('threads.public respects blocklist opt', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test4',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
-
   pull(
     pullAsync((cb) => {
-      lucy.add({ type: 'post', text: 'Thread root' }, cb);
+      ssb.db.publish({ type: 'post', text: 'Thread root' }, cb);
     }),
     pull.asyncMap((rootMsg, cb) => {
-      lucy.add(
+      ssb.db.publish(
         {
           type: 'vote',
           vote: {
@@ -310,9 +335,9 @@ test('threads.public respects blocklist opt', (t) => {
       );
     }),
     pull.asyncMap((_prevMsg, cb) => {
-      lucy.add({ type: 'shout', text: 'AAAHHH' }, cb);
+      ssb.db.publish({ type: 'shout', text: 'AAAHHH' }, cb);
     }),
-    pull.map(() => myTestSbot.threads.public({ blocklist: ['shout', 'vote'] })),
+    pull.map(() => ssb.threads.public({ blocklist: ['shout', 'vote'] })),
     pull.flatten(),
 
     pull.collect((err, threads) => {
@@ -324,41 +349,39 @@ test('threads.public respects blocklist opt', (t) => {
       const msgs = thread.messages;
       t.equals(msgs[0].value.content.root, undefined, '1st message is root');
       t.equals(msgs[0].value.content.text, 'Thread root');
-      myTestSbot.close();
+      ssb.close();
       t.end();
     }),
   );
 });
 
 test('threads.public gives multiple threads', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test5',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
-
   pull(
     pullAsync((cb) => {
-      lucy.add({ type: 'post', text: 'A: root' }, cb);
+      ssb.db.publish({ type: 'post', text: 'A: root' }, cb);
     }),
     pull.asyncMap((rootMsg, cb) => {
-      lucy.add({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, cb);
+      ssb.db.publish({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, cb);
     }),
     pull.asyncMap((prevMsg, cb) => {
       const rootKey = prevMsg.value.content.root;
-      lucy.add({ type: 'post', text: 'A: 3rd', root: rootKey }, cb);
+      ssb.db.publish({ type: 'post', text: 'A: 3rd', root: rootKey }, cb);
     }),
     pull.asyncMap((_, cb) => {
-      lucy.add({ type: 'post', text: 'B: root' }, cb);
+      ssb.db.publish({ type: 'post', text: 'B: root' }, cb);
     }),
     pull.asyncMap((rootMsg, cb) => {
-      lucy.add({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, cb);
+      ssb.db.publish({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, cb);
     }),
 
-    pull.map(() => myTestSbot.threads.public({ reverse: true })),
+    pull.map(() => ssb.threads.public({ reverse: true })),
     pull.flatten(),
 
     pull.collect((err, threads) => {
@@ -371,42 +394,40 @@ test('threads.public gives multiple threads', (t) => {
       t.equals(a.full, true, '2nd thread comes back full');
       t.equals(a.messages.length, 3, '2nd thread has 3 messages');
       t.equals(a.messages[0].value.content.text, 'A: root', '2nd thread is A');
-      myTestSbot.close();
+      ssb.close();
       t.end();
     }),
   );
 });
 
 test('threads.public sorts threads by recency', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test5',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
-
   let rootAkey;
   pull(
     pullAsync((cb) => {
-      lucy.add({ type: 'post', text: 'A: root' }, cb);
+      ssb.db.publish({ type: 'post', text: 'A: root' }, cb);
     }),
     pull.asyncMap((rootMsg, cb) => {
       rootAkey = rootMsg.key;
-      lucy.add({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, cb);
+      ssb.db.publish({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, cb);
     }),
     pull.asyncMap((_, cb) => {
-      lucy.add({ type: 'post', text: 'B: root' }, cb);
+      ssb.db.publish({ type: 'post', text: 'B: root' }, cb);
     }),
     pull.asyncMap((rootMsg, cb) => {
-      lucy.add({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, cb);
+      ssb.db.publish({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, cb);
     }),
     pull.asyncMap((_, cb) => {
-      lucy.add({ type: 'post', text: 'A: 3rd', root: rootAkey }, cb);
+      ssb.db.publish({ type: 'post', text: 'A: 3rd', root: rootAkey }, cb);
     }),
 
-    pull.map(() => myTestSbot.threads.public({ reverse: true })),
+    pull.map(() => ssb.threads.public({ reverse: true })),
     pull.flatten(),
 
     pull.collect((err, threads) => {
@@ -419,34 +440,37 @@ test('threads.public sorts threads by recency', (t) => {
       t.equals(b.full, true, '2nd thread comes back full');
       t.equals(b.messages.length, 2, '2nd thread has 2 messages');
       t.equals(b.messages[0].value.content.text, 'B: root', '2nd thread is B');
-      myTestSbot.close();
-      t.end();
+      ssb.close(t.end);
     }),
   );
 });
 
 test('threads.publicSummary gives a simple well-formed summary', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test1',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
-
   pull(
     pullAsync((cb) => {
-      lucy.add({ type: 'post', text: 'Thread root' }, cb);
+      ssb.db.publish({ type: 'post', text: 'Thread root' }, cb);
     }),
     pull.asyncMap((rootMsg, cb) => {
-      lucy.add({ type: 'post', text: 'Second message', root: rootMsg.key }, cb);
+      ssb.db.publish(
+        { type: 'post', text: 'Second message', root: rootMsg.key },
+        cb,
+      );
     }),
     pull.asyncMap((prevMsg, cb) => {
       const rootKey = prevMsg.value.content.root;
-      lucy.add({ type: 'post', text: 'Third message', root: rootKey }, cb);
+      ssb.db.publish(
+        { type: 'post', text: 'Third message', root: rootKey },
+        cb,
+      );
     }),
-    pull.map(() => myTestSbot.threads.publicSummary({})),
+    pull.map(() => ssb.threads.publicSummary({})),
     pull.flatten(),
 
     pull.collect((err, summaries) => {
@@ -465,81 +489,128 @@ test('threads.publicSummary gives a simple well-formed summary', (t) => {
       );
       t.equals(summary.root.value.content.text, 'Thread root');
 
-      myTestSbot.close();
-      t.end();
+      ssb.close(t.end);
     }),
   );
 });
 
 test('threads.publicUpdates notifies of new thread or new msg', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test6',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
-  const mary = myTestSbot.createFeed(maryKeys);
+  let state = validate.initial();
+
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    { type: 'post', text: 'A: root' },
+    Date.now(),
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    maryKeys,
+    { type: 'post', text: 'A: 2nd', root: state.queue[0].key },
+    Date.now() + 1,
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    maryKeys,
+    { type: 'post', text: 'B: root' },
+    Date.now() + 2,
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    { type: 'post', text: 'B: 2nd', root: state.queue[2].key },
+    Date.now() + 3,
+  );
 
   let updates = 0;
 
+  let liveDrainer;
   pull(
-    myTestSbot.threads.publicUpdates({}),
-    pull.drain(() => {
+    ssb.threads.publicUpdates({}),
+    (liveDrainer = pull.drain(() => {
       updates++;
-    }),
+    })),
   );
 
   pull(
     pullAsync((cb) => {
-      lucy.add({ type: 'post', text: 'A: root' }, wait(cb));
+      ssb.db.add(state.queue[0].value, wait(cb));
     }),
-    pull.asyncMap((rootMsg, cb) => {
+    pull.asyncMap((_, cb) => {
       t.equals(updates, 0);
-      mary.add({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, wait(cb));
+      ssb.db.add(state.queue[1].value, wait(cb));
     }),
     pull.asyncMap((_, cb) => {
       t.equals(updates, 1);
-      mary.add({ type: 'post', text: 'B: root' }, wait(cb));
+      ssb.db.add(state.queue[2].value, wait(cb));
     }),
-    pull.asyncMap((rootMsg, cb) => {
+    pull.asyncMap((_, cb) => {
       t.equals(updates, 2);
-      lucy.add({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, wait(cb));
+      ssb.db.add(state.queue[3].value, wait(cb));
     }),
 
     pull.drain(() => {
-      t.equals(updates, 2);
-      myTestSbot.close();
-      t.end();
+      t.equals(updates, 2, 'total updates');
+      liveDrainer.abort();
+      ssb.close(t.end);
     }),
   );
 });
 
 test('threads.profile gives threads for lucy not mary', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test1',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
-  const mary = myTestSbot.createFeed(maryKeys);
-  let rootId;
+  let state = validate.initial();
+
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    { type: 'post', text: 'Root from lucy' },
+    Date.now(),
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    maryKeys,
+    { type: 'post', text: 'Root from mary' },
+    Date.now() + 1,
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    { type: 'post', text: 'Reply from lucy', root: state.queue[0].key },
+    Date.now() + 2,
+  );
 
   pull(
     pullAsync((cb) => {
-      lucy.add({ type: 'post', text: 'Root from lucy' }, cb);
-    }),
-    pull.asyncMap((rootMsg, cb) => {
-      rootId = rootMsg.key;
-      mary.add({ type: 'post', text: 'Root from mary' }, cb);
+      ssb.db.add(state.queue[0].value, wait(cb));
     }),
     pull.asyncMap((_, cb) => {
-      lucy.add({ type: 'post', text: 'Reply from lucy', root: rootId }, cb);
+      ssb.db.add(state.queue[1].value, wait(cb));
     }),
-    pull.map(() => myTestSbot.threads.profile({ id: lucy.id })),
+    pull.asyncMap((_, cb) => {
+      ssb.db.add(state.queue[2].value, wait(cb));
+    }),
+    pull.map(() => ssb.threads.profile({ id: lucyKeys.id })),
     pull.flatten(),
 
     pull.collect((err, threads) => {
@@ -557,36 +628,92 @@ test('threads.profile gives threads for lucy not mary', (t) => {
       t.equals(msgs[1].value.content.root, rootKey, '2nd message is not root');
       t.equals(msgs[1].value.content.text, 'Reply from lucy');
 
-      myTestSbot.close();
-      t.end();
+      ssb.close(t.end);
     }),
   );
 });
 
 test('threads.profileSummary gives threads for lucy not mary', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test1',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
-  const mary = myTestSbot.createFeed(maryKeys);
-  let rootId;
+  let state = validate.initial();
+
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    { type: 'post', text: 'Root from lucy' },
+    Date.now(),
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    maryKeys,
+    { type: 'post', text: 'Root from mary' },
+    Date.now() + 1,
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    { type: 'post', text: 'Reply from lucy', root: state.queue[0].key },
+    Date.now() + 2,
+  );
 
   pull(
     pullAsync((cb) => {
-      lucy.add({ type: 'post', text: 'Root from lucy' }, cb);
-    }),
-    pull.asyncMap((rootMsg, cb) => {
-      rootId = rootMsg.key;
-      mary.add({ type: 'post', text: 'Root from mary' }, cb);
+      ssb.db.add(state.queue[0].value, wait(cb));
     }),
     pull.asyncMap((_, cb) => {
-      lucy.add({ type: 'post', text: 'Reply from lucy', root: rootId }, cb);
+      ssb.db.add(state.queue[1].value, wait(cb));
     }),
-    pull.map(() => myTestSbot.threads.profileSummary({ id: lucy.id })),
+    pull.asyncMap((_, cb) => {
+      ssb.db.add(state.queue[2].value, wait(cb));
+    }),
+    pull.map(() => ssb.threads.profileSummary({ id: lucyKeys.id })),
+    pull.flatten(),
+
+    pull.collect((err, summaries) => {
+      t.error(err);
+      t.equals(summaries.length, 1, 'only one summary');
+      const summary = summaries[0];
+      t.equals(summary.replyCount, 1, 'summary counts 1 reply');
+      t.equals(
+        summary.root.value.content.root,
+        undefined,
+        'root message is root',
+      );
+      t.equals(summary.root.value.content.text, 'Root from lucy');
+
+      ssb.close(t.end);
+    }),
+  );
+});
+
+test('threads.profileSummary gives summary with correct timestamp', (t) => {
+  const ssb = CreateSSB({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
+    temp: true,
+    name: 'test1',
+    keys: lucyKeys,
+  });
+
+  pull(
+    pullAsync((cb) => {
+      ssb.db.publish({ type: 'post', text: 'Root from lucy' }, wait(cb));
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      ssb.db.publish(
+        { type: 'post', text: 'Reply from lucy', root: rootMsg.key },
+        wait(cb),
+      );
+    }),
+    pull.map(() => ssb.threads.profileSummary({ id: lucyKeys.id })),
     pull.flatten(),
 
     pull.collect((err, summaries) => {
@@ -605,47 +732,47 @@ test('threads.profileSummary gives threads for lucy not mary', (t) => {
       );
       t.equals(summary.root.value.content.text, 'Root from lucy');
 
-      myTestSbot.close();
-      t.end();
+      ssb.close(t.end);
     }),
   );
 });
 
 test('threads.private gives a simple well-formed thread', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test1',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
   let rootKey;
-
   pull(
     pullAsync((cb) => {
-      myTestSbot.private.publish(
-        { type: 'post', text: 'Secret thread root' },
-        [myTestSbot.id],
+      ssb.db.publish(
+        ssbKeys.box({ type: 'post', text: 'Secret thread root' }, [ssb.id]),
         cb,
       );
     }),
     pull.asyncMap((rootMsg, cb) => {
       rootKey = rootMsg.key;
-      myTestSbot.private.publish(
-        { type: 'post', text: 'Second secret message', root: rootKey },
-        [myTestSbot.id],
+      ssb.db.publish(
+        ssbKeys.box(
+          { type: 'post', text: 'Second secret message', root: rootKey },
+          [ssb.id],
+        ),
         cb,
       );
     }),
     pull.asyncMap((_prevMsg, cb) => {
-      myTestSbot.private.publish(
-        { type: 'post', text: 'Third secret message', root: rootKey },
-        [myTestSbot.id],
+      ssb.db.publish(
+        ssbKeys.box(
+          { type: 'post', text: 'Third secret message', root: rootKey },
+          [ssb.id],
+        ),
         cb,
       );
     }),
-    pull.map(() => myTestSbot.threads.private({})),
+    pull.map(() => ssb.threads.private({})),
     pull.flatten(),
 
     pull.collect((err, sthreads) => {
@@ -667,12 +794,11 @@ test('threads.private gives a simple well-formed thread', (t) => {
       t.equals(msgs[2].value.content.text, 'Third secret message');
 
       pull(
-        myTestSbot.threads.public({}),
+        ssb.threads.public({}),
         pull.collect((err, threads) => {
           t.error(err);
           t.equals(threads.length, 0, 'there are no public threads');
-          myTestSbot.close();
-          t.end();
+          ssb.close(t.end);
         }),
       );
     }),
@@ -680,89 +806,107 @@ test('threads.private gives a simple well-formed thread', (t) => {
 });
 
 test('threads.privateUpdates notifies of new thread or new msg', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test6',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
-  const mary = myTestSbot.createFeed(maryKeys);
+  let state = validate.initial();
+
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    ssbKeys.box({ type: 'post', text: 'A: root' }, [lucyKeys.id, maryKeys.id]),
+    Date.now(),
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    maryKeys,
+    ssbKeys.box({ type: 'post', text: 'A: 2nd', root: state.queue[0].key }, [
+      lucyKeys.id,
+      maryKeys.id,
+    ]),
+    Date.now() + 1,
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    maryKeys,
+    ssbKeys.box({ type: 'post', text: 'B: root' }, [lucyKeys.id, maryKeys.id]),
+    Date.now() + 2,
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    ssbKeys.box({ type: 'post', text: 'B: 2nd', root: state.queue[2].key }, [
+      lucyKeys.id,
+      maryKeys.id,
+    ]),
+    Date.now() + 3,
+  );
 
   let updates = 0;
-
+  let liveDrainer;
   pull(
-    myTestSbot.threads.privateUpdates({}),
-    pull.drain(() => {
+    ssb.threads.privateUpdates({}),
+    (liveDrainer = pull.drain(() => {
       updates++;
-    }),
+    })),
   );
 
   pull(
     pullAsync((cb) => {
-      lucy.add(
-        ssbKeys.box({ type: 'post', text: 'A: root' }, [lucy.id, mary.id]),
-        wait(cb),
-      );
+      ssb.db.add(state.queue[0].value, wait(cb));
     }),
-    pull.asyncMap((rootMsg, cb) => {
+    pull.asyncMap((_, cb) => {
       t.equals(updates, 0);
-      const root = rootMsg.key;
-      mary.add(
-        ssbKeys.box({ type: 'post', text: 'A: 2nd', root }, [lucy.id, mary.id]),
-        wait(cb),
-      );
+      ssb.db.add(state.queue[1].value, wait(cb));
     }),
     pull.asyncMap((_, cb) => {
       t.equals(updates, 1);
-      mary.add(
-        ssbKeys.box({ type: 'post', text: 'B: root' }, [lucy.id, mary.id]),
-        wait(cb),
-      );
+      ssb.db.add(state.queue[2].value, wait(cb));
     }),
-    pull.asyncMap((rootMsg, cb) => {
+    pull.asyncMap((_, cb) => {
       t.equals(updates, 2);
-      const root = rootMsg.key;
-      lucy.add(
-        ssbKeys.box({ type: 'post', text: 'B: 2nd', root }, [lucy.id, mary.id]),
-        wait(cb),
-      );
+      ssb.db.add(state.queue[3].value, wait(cb));
     }),
 
     pull.drain(() => {
       t.equals(updates, 2);
-      myTestSbot.close();
-      t.end();
+      liveDrainer.abort();
+      ssb.close(t.end);
     }),
   );
 });
 
 test('threads.thread gives one full thread', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test7',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
-
   let rootAkey;
   pull(
     pullAsync((cb) => {
-      lucy.add({ type: 'post', text: 'A: root' }, cb);
+      ssb.db.publish({ type: 'post', text: 'A: root' }, cb);
     }),
     pull.asyncMap((rootMsg, cb) => {
       rootAkey = rootMsg.key;
-      lucy.add({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, cb);
+      ssb.db.publish({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, cb);
     }),
     pull.asyncMap((prevMsg, cb) => {
       const rootKey = prevMsg.value.content.root;
-      lucy.add({ type: 'post', text: 'A: 3rd', root: rootKey }, cb);
+      ssb.db.publish({ type: 'post', text: 'A: 3rd', root: rootKey }, cb);
     }),
 
-    pull.map(() => myTestSbot.threads.thread({ root: rootAkey })),
+    pull.map(() => ssb.threads.thread({ root: rootAkey })),
     pull.flatten(),
 
     pull.collect((err, threads) => {
@@ -774,40 +918,37 @@ test('threads.thread gives one full thread', (t) => {
       t.equals(thread.messages[0].value.content.text, 'A: root', 'root msg ok');
       t.equals(thread.messages[1].value.content.text, 'A: 2nd', '2nd msg ok');
       t.equals(thread.messages[2].value.content.text, 'A: 3rd', '3rd msg ok');
-      myTestSbot.close();
-      t.end();
+      ssb.close(t.end);
     }),
   );
 });
 
 test('threads.thread can be called twice consecutively (to use cache)', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test7',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
-
   let rootAkey;
   pull(
     pullAsync((cb) => {
-      lucy.add({ type: 'post', text: 'A: root' }, cb);
+      ssb.db.publish({ type: 'post', text: 'A: root' }, cb);
     }),
     pull.asyncMap((rootMsg, cb) => {
       rootAkey = rootMsg.key;
-      lucy.add({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, cb);
+      ssb.db.publish({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, cb);
     }),
     pull.asyncMap((prevMsg, cb) => {
       const rootKey = prevMsg.value.content.root;
-      lucy.add({ type: 'post', text: 'A: 3rd', root: rootKey }, cb);
+      ssb.db.publish({ type: 'post', text: 'A: 3rd', root: rootKey }, cb);
     }),
 
     pull.map(() =>
       cat([
-        myTestSbot.threads.thread({ root: rootAkey }),
-        myTestSbot.threads.thread({ root: rootAkey }),
+        ssb.threads.thread({ root: rootAkey }),
+        ssb.threads.thread({ root: rootAkey }),
       ]),
     ),
     pull.flatten(),
@@ -830,93 +971,95 @@ test('threads.thread can be called twice consecutively (to use cache)', (t) => {
       t.equals(t2.messages[0].value.content.text, 'A: root', 'root msg ok');
       t.equals(t2.messages[1].value.content.text, 'A: 2nd', '2nd msg ok');
       t.equals(t2.messages[2].value.content.text, 'A: 3rd', '3rd msg ok');
-      myTestSbot.close();
-      t.end();
+      ssb.close(t.end);
     }),
   );
 });
 
 test('threads.thread (by default) cannot view private conversations', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test1',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
   let rootKey;
 
   pull(
     pullAsync((cb) => {
-      myTestSbot.private.publish(
-        { type: 'post', text: 'Secret thread root' },
-        [myTestSbot.id],
+      ssb.db.publish(
+        ssbKeys.box({ type: 'post', text: 'Secret thread root' }, [ssb.id]),
         cb,
       );
     }),
     pull.asyncMap((rootMsg, cb) => {
       rootKey = rootMsg.key;
-      myTestSbot.private.publish(
-        { type: 'post', text: 'Second secret message', root: rootKey },
-        [myTestSbot.id],
+      ssb.db.publish(
+        ssbKeys.box(
+          { type: 'post', text: 'Second secret message', root: rootKey },
+          [ssb.id],
+        ),
         cb,
       );
     }),
     pull.asyncMap((_prevMsg, cb) => {
-      myTestSbot.private.publish(
-        { type: 'post', text: 'Third secret message', root: rootKey },
-        [myTestSbot.id],
+      ssb.db.publish(
+        ssbKeys.box(
+          { type: 'post', text: 'Third secret message', root: rootKey },
+          [ssb.id],
+        ),
         cb,
       );
     }),
-    pull.map(() => myTestSbot.threads.thread({ root: rootKey })),
+    pull.map(() => ssb.threads.thread({ root: rootKey })),
     pull.flatten(),
 
     pull.collect((err, threads) => {
       t.error(err, 'no error');
       t.equals(threads.length, 0, 'no threads arrived');
-      myTestSbot.close();
-      t.end();
+      ssb.close(t.end);
     }),
   );
 });
 
 test('threads.thread can view private conversations given opts.private', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test1',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
   let rootKey;
 
   pull(
     pullAsync((cb) => {
-      myTestSbot.private.publish(
-        { type: 'post', text: 'Secret thread root' },
-        [myTestSbot.id],
+      ssb.db.publish(
+        ssbKeys.box({ type: 'post', text: 'Secret thread root' }, [ssb.id]),
         cb,
       );
     }),
     pull.asyncMap((rootMsg, cb) => {
       rootKey = rootMsg.key;
-      myTestSbot.private.publish(
-        { type: 'post', text: 'Second secret message', root: rootKey },
-        [myTestSbot.id],
+      ssb.db.publish(
+        ssbKeys.box(
+          { type: 'post', text: 'Second secret message', root: rootKey },
+          [ssb.id],
+        ),
         cb,
       );
     }),
     pull.asyncMap((_prevMsg, cb) => {
-      myTestSbot.private.publish(
-        { type: 'post', text: 'Third secret message', root: rootKey },
-        [myTestSbot.id],
+      ssb.db.publish(
+        ssbKeys.box(
+          { type: 'post', text: 'Third secret message', root: rootKey },
+          [ssb.id],
+        ),
         cb,
       );
     }),
-    pull.map(() => myTestSbot.threads.thread({ root: rootKey, private: true })),
+    pull.map(() => ssb.threads.thread({ root: rootKey, private: true })),
     pull.flatten(),
 
     pull.collect((err, threads) => {
@@ -928,184 +1071,250 @@ test('threads.thread can view private conversations given opts.private', (t) => 
       t.equals(thread.messages[0].value.content.text, 'Secret thread root');
       t.equals(thread.messages[1].value.content.text, 'Second secret message');
       t.equals(thread.messages[2].value.content.text, 'Third secret message');
-      myTestSbot.close();
-      t.end();
+      ssb.close(t.end);
     }),
   );
 });
 
 test('threads.threadUpdates notifies of new reply to that thread', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test6',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
-  const mary = myTestSbot.createFeed(maryKeys);
+  let state = validate.initial();
+
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    { type: 'post', text: 'A: root' },
+    Date.now(),
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    maryKeys,
+    { type: 'post', text: 'A: 2nd', root: state.queue[0].key },
+    Date.now() + 1,
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    maryKeys,
+    { type: 'post', text: 'B: root' },
+    Date.now() + 2,
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    { type: 'post', text: 'B: 2nd', root: state.queue[2].key },
+    Date.now() + 3,
+  );
 
   let updates = 0;
+  let liveDrainer;
 
   pull(
     pullAsync((cb) => {
-      lucy.add({ type: 'post', text: 'A: root' }, wait(cb));
+      ssb.db.add(state.queue[0].value, wait(cb));
     }),
     pull.asyncMap((rootMsg, cb) => {
       pull(
-        myTestSbot.threads.threadUpdates({ root: rootMsg.key }),
-        pull.drain((msg) => {
+        ssb.threads.threadUpdates({ root: rootMsg.key }),
+        (liveDrainer = pull.drain((msg) => {
           t.equals(msg.value.content.root, rootMsg.key, 'got update');
           updates++;
-        }),
+        })),
       );
 
-      t.equals(updates, 0);
-      mary.add({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, wait(cb));
+      setTimeout(() => {
+        t.equals(updates, 0);
+        ssb.db.add(state.queue[1].value, wait(cb));
+      }, 300);
     }),
     pull.asyncMap((_, cb) => {
       t.equals(updates, 1);
-      mary.add({ type: 'post', text: 'B: root' }, wait(cb));
+      ssb.db.add(state.queue[2].value, wait(cb));
     }),
-    pull.asyncMap((rootMsg, cb) => {
+    pull.asyncMap((_, cb) => {
       t.equals(updates, 1);
-      lucy.add({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, wait(cb));
+      ssb.db.add(state.queue[3].value, wait(cb));
     }),
 
     pull.drain(() => {
       t.equals(updates, 1);
-      myTestSbot.close();
-      t.end();
+      liveDrainer.abort();
+      ssb.close(t.end);
     }),
   );
 });
 
 test('threads.threadUpdates (by default) cannot see private replies', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test6',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
-  const mary = myTestSbot.createFeed(maryKeys);
+  let state = validate.initial();
+
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    ssbKeys.box({ type: 'post', text: 'A: root' }, [lucyKeys.id, maryKeys.id]),
+    Date.now(),
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    maryKeys,
+    ssbKeys.box({ type: 'post', text: 'A: 2nd', root: state.queue[0].key }, [
+      lucyKeys.id,
+      maryKeys.id,
+    ]),
+    Date.now() + 1,
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    maryKeys,
+    ssbKeys.box({ type: 'post', text: 'B: root' }, [lucyKeys.id, maryKeys.id]),
+    Date.now() + 2,
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    ssbKeys.box({ type: 'post', text: 'B: 2nd', root: state.queue[2].key }, [
+      lucyKeys.id,
+      maryKeys.id,
+    ]),
+    Date.now() + 3,
+  );
 
   let updates = 0;
+  let liveDrainer;
 
   pull(
     pullAsync((cb) => {
-      lucy.add(
-        ssbKeys.box({ type: 'post', text: 'A: root' }, [lucy.id, mary.id]),
-        wait(cb),
-      );
+      ssb.db.add(state.queue[0].value, wait(cb));
     }),
     pull.asyncMap((rootMsg, cb) => {
       pull(
-        myTestSbot.threads.threadUpdates({ root: rootMsg.key }),
-        pull.drain((m) => {
+        ssb.threads.threadUpdates({ root: rootMsg.key }),
+        (liveDrainer = pull.drain((m) => {
           t.fail('should not get an update');
           updates++;
-        }),
+        })),
       );
 
-      t.equals(updates, 0);
-
-      mary.add(
-        ssbKeys.box({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, [
-          lucy.id,
-          mary.id,
-        ]),
-        wait(cb),
-      );
+      setTimeout(() => {
+        t.equals(updates, 0);
+        ssb.db.add(state.queue[1].value, wait(cb));
+      }, 300);
     }),
     pull.asyncMap((_, cb) => {
       t.equals(updates, 0);
-      mary.add(
-        ssbKeys.box({ type: 'post', text: 'B: root' }, [lucy.id, mary.id]),
-        wait(cb),
-      );
+      ssb.db.add(state.queue[2].value, wait(cb));
     }),
-    pull.asyncMap((rootMsg, cb) => {
+    pull.asyncMap((_, cb) => {
       t.equals(updates, 0);
-      lucy.add(
-        ssbKeys.box({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, [
-          lucy.id,
-          mary.id,
-        ]),
-        wait(cb),
-      );
+      ssb.db.add(state.queue[3].value, wait(cb));
     }),
 
     pull.drain(() => {
       t.equals(updates, 0);
-      myTestSbot.close();
-      t.end();
+      liveDrainer.abort();
+      ssb.close(t.end);
     }),
   );
 });
 
 test('threads.threadUpdates can view private replies given opts.private', (t) => {
-  const myTestSbot = CreateTestSbot({
+  const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
     temp: true,
     name: 'test6',
     keys: lucyKeys,
   });
 
-  const lucy = myTestSbot.createFeed(lucyKeys);
-  const mary = myTestSbot.createFeed(maryKeys);
+  let state = validate.initial();
+
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    ssbKeys.box({ type: 'post', text: 'A: root' }, [lucyKeys.id, maryKeys.id]),
+    Date.now(),
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    maryKeys,
+    ssbKeys.box({ type: 'post', text: 'A: 2nd', root: state.queue[0].key }, [
+      lucyKeys.id,
+      maryKeys.id,
+    ]),
+    Date.now() + 1,
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    maryKeys,
+    ssbKeys.box({ type: 'post', text: 'B: root' }, [lucyKeys.id, maryKeys.id]),
+    Date.now() + 2,
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    ssbKeys.box({ type: 'post', text: 'B: 2nd', root: state.queue[2].key }, [
+      lucyKeys.id,
+      maryKeys.id,
+    ]),
+    Date.now() + 3,
+  );
 
   let updates = 0;
+  let liveDrainer
 
   pull(
     pullAsync((cb) => {
-      lucy.add(
-        ssbKeys.box({ type: 'post', text: 'A: root' }, [lucy.id, mary.id]),
-        wait(cb),
-      );
+      ssb.db.add(state.queue[0].value, wait(cb));
     }),
     pull.asyncMap((rootMsg, cb) => {
       pull(
-        myTestSbot.threads.threadUpdates({ root: rootMsg.key, private: true }),
-        pull.drain((msg) => {
+        ssb.threads.threadUpdates({ root: rootMsg.key, private: true }),
+        liveDrainer = pull.drain((msg) => {
           t.equals(msg.value.content.root, rootMsg.key, 'got update');
           updates++;
         }),
       );
 
-      t.equals(updates, 0);
-
-      mary.add(
-        ssbKeys.box({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, [
-          lucy.id,
-          mary.id,
-        ]),
-        wait(cb),
-      );
+      setTimeout(() => {
+        t.equals(updates, 0);
+        ssb.db.add(state.queue[1].value, wait(cb));
+      }, 300);
     }),
     pull.asyncMap((_, cb) => {
       t.equals(updates, 1);
-      mary.add(
-        ssbKeys.box({ type: 'post', text: 'B: root' }, [lucy.id, mary.id]),
-        wait(cb),
-      );
+      ssb.db.add(state.queue[2].value, wait(cb));
     }),
-    pull.asyncMap((rootMsg, cb) => {
+    pull.asyncMap((_, cb) => {
       t.equals(updates, 1);
-      lucy.add(
-        ssbKeys.box({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, [
-          lucy.id,
-          mary.id,
-        ]),
-        wait(cb),
-      );
+      ssb.db.add(state.queue[3].value, wait(cb));
     }),
 
     pull.drain(() => {
       t.equals(updates, 1);
-      myTestSbot.close();
-      t.end();
+      liveDrainer.abort()
+      ssb.close(t.end);
     }),
   );
 });
