@@ -1,5 +1,8 @@
 import { Msg, MsgId, UnboxedMsg } from 'ssb-typescript';
-import { isPublic as isPublicType, isRootMsg } from 'ssb-typescript/utils';
+import {
+  isPublic as isPublicType,
+  isPrivate as isPrivateType,
+} from 'ssb-typescript/utils';
 import { plugin, muxrpc } from 'secret-stack-decorators';
 import {
   Opts,
@@ -125,8 +128,11 @@ class threads {
           pull.values([root]),
           pull(
             this.ssb.db.query(
-              and(hasRoot(root.key), filter),
-              // FIXME: dont we need to use `privately` here?
+              and(
+                hasRoot(root.key),
+                filter,
+                privately ? isPrivate() : isPublic(),
+              ),
               descending(),
               toPullStream(),
             ),
@@ -299,7 +305,8 @@ class threads {
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
       this.fetchMsgFromId,
-      pull.filter(isRootMsg),
+      pull.filter(isPrivateType),
+      pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
       pull.take(maxThreads),
       pull.asyncMap(this.nonBlockedRootToThread(threadMaxSize, filter, true)),
