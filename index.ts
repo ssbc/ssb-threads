@@ -99,10 +99,6 @@ class threads {
 
   //#region PRIVATE
 
-  private isNotMine = (msg: Msg<any>): boolean => {
-    return msg?.value?.author !== this.ssb.id;
-  };
-
   private removeMessagesFromBlocked = (source: any) =>
     pull(
       source,
@@ -279,12 +275,10 @@ class threads {
 
     return pull(
       this.ssb.db.query(
-        and(isPublic(), filter),
+        and(isPublic(), filter, includeSelf ? null : not(author(this.ssb.id))),
         live({ old: false }),
         toPullStream(),
       ),
-      includeSelf ? pull.through() : pull.filter(this.isNotMine),
-      pull.filter(isPublicType),
       this.removeMessagesFromBlocked,
       pull.map((msg: Msg) => msg.key),
     );
@@ -326,11 +320,10 @@ class threads {
 
     return pull(
       this.ssb.db.query(
-        and(isPrivate(), filter),
+        and(isPrivate(), filter, includeSelf ? null : not(author(this.ssb.id))),
         live({ old: false }),
         toPullStream(),
       ),
-      includeSelf ? pull.through() : pull.filter(this.isNotMine),
       this.removeMessagesFromBlocked,
       pull.map(getRootMsgId),
     );

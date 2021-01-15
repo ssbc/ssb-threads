@@ -568,6 +568,80 @@ test('threads.publicUpdates notifies of new thread or new msg', (t) => {
   );
 });
 
+test('threads.publicUpdates respects includeSelf opt', (t) => {
+  const ssb = CreateSSB({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
+    temp: true,
+    name: 'test6',
+    keys: lucyKeys,
+  });
+
+  let state = validate.initial();
+
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    { type: 'post', text: 'A: root' },
+    Date.now(),
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    maryKeys,
+    { type: 'post', text: 'A: 2nd', root: state.queue[0].key },
+    Date.now() + 1,
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    maryKeys,
+    { type: 'post', text: 'B: root' },
+    Date.now() + 2,
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    { type: 'post', text: 'B: 2nd', root: state.queue[2].key },
+    Date.now() + 3,
+  );
+
+  let updates = 0;
+
+  let liveDrainer;
+  pull(
+    ssb.threads.publicUpdates({ includeSelf: true }),
+    (liveDrainer = pull.drain(() => {
+      updates++;
+    })),
+  );
+
+  pull(
+    pullAsync((cb) => {
+      ssb.db.add(state.queue[0].value, wait(cb));
+    }),
+    pull.asyncMap((_, cb) => {
+      t.equals(updates, 1);
+      ssb.db.add(state.queue[1].value, wait(cb));
+    }),
+    pull.asyncMap((_, cb) => {
+      t.equals(updates, 2);
+      ssb.db.add(state.queue[2].value, wait(cb));
+    }),
+    pull.asyncMap((_, cb) => {
+      t.equals(updates, 3);
+      ssb.db.add(state.queue[3].value, wait(cb));
+    }),
+
+    pull.drain(() => {
+      t.equals(updates, 4, 'total updates');
+      liveDrainer.abort();
+      ssb.close(t.end);
+    }),
+  );
+});
+
 test('threads.profile gives threads for lucy not mary', (t) => {
   const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
@@ -878,6 +952,85 @@ test('threads.privateUpdates notifies of new thread or new msg', (t) => {
 
     pull.drain(() => {
       t.equals(updates, 2);
+      liveDrainer.abort();
+      ssb.close(t.end);
+    }),
+  );
+});
+
+test('threads.privateUpdates respects includeSelf', (t) => {
+  const ssb = CreateSSB({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
+    temp: true,
+    name: 'test6',
+    keys: lucyKeys,
+  });
+
+  let state = validate.initial();
+
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    ssbKeys.box({ type: 'post', text: 'A: root' }, [lucyKeys.id, maryKeys.id]),
+    Date.now(),
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    maryKeys,
+    ssbKeys.box({ type: 'post', text: 'A: 2nd', root: state.queue[0].key }, [
+      lucyKeys.id,
+      maryKeys.id,
+    ]),
+    Date.now() + 1,
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    maryKeys,
+    ssbKeys.box({ type: 'post', text: 'B: root' }, [lucyKeys.id, maryKeys.id]),
+    Date.now() + 2,
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    ssbKeys.box({ type: 'post', text: 'B: 2nd', root: state.queue[2].key }, [
+      lucyKeys.id,
+      maryKeys.id,
+    ]),
+    Date.now() + 3,
+  );
+
+  let updates = 0;
+  let liveDrainer;
+  pull(
+    ssb.threads.privateUpdates({ includeSelf: true }),
+    (liveDrainer = pull.drain(() => {
+      updates++;
+    })),
+  );
+
+  pull(
+    pullAsync((cb) => {
+      ssb.db.add(state.queue[0].value, wait(cb));
+    }),
+    pull.asyncMap((_, cb) => {
+      t.equals(updates, 1);
+      ssb.db.add(state.queue[1].value, wait(cb));
+    }),
+    pull.asyncMap((_, cb) => {
+      t.equals(updates, 2);
+      ssb.db.add(state.queue[2].value, wait(cb));
+    }),
+    pull.asyncMap((_, cb) => {
+      t.equals(updates, 3);
+      ssb.db.add(state.queue[3].value, wait(cb));
+    }),
+
+    pull.drain(() => {
+      t.equals(updates, 4);
       liveDrainer.abort();
       ssb.close(t.end);
     }),
@@ -1282,7 +1435,7 @@ test('threads.threadUpdates can view private replies given opts.private', (t) =>
   );
 
   let updates = 0;
-  let liveDrainer
+  let liveDrainer;
 
   pull(
     pullAsync((cb) => {
@@ -1291,10 +1444,10 @@ test('threads.threadUpdates can view private replies given opts.private', (t) =>
     pull.asyncMap((rootMsg, cb) => {
       pull(
         ssb.threads.threadUpdates({ root: rootMsg.key, private: true }),
-        liveDrainer = pull.drain((msg) => {
+        (liveDrainer = pull.drain((msg) => {
           t.equals(msg.value.content.root, rootMsg.key, 'got update');
           updates++;
-        }),
+        })),
       );
 
       setTimeout(() => {
@@ -1313,7 +1466,7 @@ test('threads.threadUpdates can view private replies given opts.private', (t) =>
 
     pull.drain(() => {
       t.equals(updates, 1);
-      liveDrainer.abort()
+      liveDrainer.abort();
       ssb.close(t.end);
     }),
   );
