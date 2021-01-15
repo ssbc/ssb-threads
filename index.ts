@@ -14,7 +14,6 @@ import {
 const pull = require('pull-stream');
 const cat = require('pull-cat');
 const sort = require('ssb-sort');
-const ssbKeys = require('ssb-keys');
 const Ref = require('ssb-ref');
 const {
   and,
@@ -181,11 +180,6 @@ class threads {
       }),
     );
 
-  private maybeUnboxMsg = (msg: Msg): Msg | UnboxedMsg => {
-    if (typeof msg.value.content !== 'string') return msg;
-    return ssbKeys.unbox(msg, this.ssb.keys.private);
-  };
-
   private rootToThread = (maxSize: number, filter: any, privately: boolean) => {
     return pull.asyncMap((root: UnboxedMsg, cb: CB<Thread>) => {
       this.isBlocking(
@@ -305,7 +299,6 @@ class threads {
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
       this.fetchMsgFromId,
-      pull.map(this.maybeUnboxMsg), // FIXME: not needed? can delete?
       pull.filter(isRootMsg),
       this.removeMessagesFromBlocked,
       pull.take(maxThreads),
@@ -404,7 +397,7 @@ class threads {
     return pull(
       pull.values([opts.root]),
       this.fetchMsgFromId,
-      privately ? pull.map(this.maybeUnboxMsg) : pull.filter(isPublicType),
+      privately ? pull.through() : pull.filter(isPublicType),
       this.rootToThread(threadMaxSize, filter, privately),
     );
   };
