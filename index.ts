@@ -178,12 +178,16 @@ class threads {
    * 1. Checks if there is a Msg in the cache for the source MsgId
    * 2. If not in the cache, do a database lookup
    */
-  private fetchMsgFromId = (source: any) =>
+  private fetchMsgFromIdIfItExists = (source: any) =>
     pull(
       source,
       pull.asyncMap((id: MsgId, cb: CB<Msg<any>>) => {
-        this.ssb.db.getMsg(id, cb);
+        this.ssb.db.getMsg(id, (err: any, msg: Msg) => {
+          if (err) cb(null) // missing msg
+          else cb(err,msg)
+        });
       }),
+      pull.filter(), // remove missing msg
     );
 
   private rootToThread = (maxSize: number, filter: any, privately: boolean) => {
@@ -225,7 +229,7 @@ class threads {
       ),
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
-      this.fetchMsgFromId,
+      this.fetchMsgFromIdIfItExists,
       pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
@@ -255,7 +259,7 @@ class threads {
       ),
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
-      this.fetchMsgFromId,
+      this.fetchMsgFromIdIfItExists,
       pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
@@ -298,7 +302,7 @@ class threads {
       ),
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
-      this.fetchMsgFromId,
+      this.fetchMsgFromIdIfItExists,
       pull.filter(isPrivateType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
@@ -342,7 +346,7 @@ class threads {
       ),
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
-      this.fetchMsgFromId,
+      this.fetchMsgFromIdIfItExists,
       pull.filter(isPublicType),
       this.removeMessagesFromBlocked,
       pull.take(maxThreads),
@@ -372,7 +376,7 @@ class threads {
       ),
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
-      this.fetchMsgFromId,
+      this.fetchMsgFromIdIfItExists,
       pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
@@ -393,7 +397,7 @@ class threads {
 
     return pull(
       pull.values([opts.root]),
-      this.fetchMsgFromId,
+      this.fetchMsgFromIdIfItExists,
       privately ? pull.through() : pull.filter(isPublicType),
       this.rootToThread(threadMaxSize, filter, privately),
     );

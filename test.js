@@ -445,6 +445,45 @@ test('threads.public sorts threads by recency', (t) => {
   );
 });
 
+test('threads.public ignores threads where root msg is missing', (t) => {
+  const ssb = CreateSSB({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
+    temp: true,
+    name: 'test5',
+    keys: lucyKeys,
+  });
+
+  let rootAkey;
+  pull(
+    pullAsync((cb) => {
+      ssb.db.publish({ type: 'post', text: 'A: root' }, cb);
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      rootAkey = rootMsg.key;
+      ssb.db.publish({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, cb);
+    }),
+    pull.asyncMap((_, cb) => {
+      ssb.db.publish({ type: 'post', text: 'B: 2nd', root: rootAkey.toLowerCase() }, cb);
+    }),
+    pull.asyncMap((_, cb) => {
+      ssb.db.publish({ type: 'post', text: 'A: 3rd', root: rootAkey }, cb);
+    }),
+
+    pull.map(() => ssb.threads.public({ reverse: true })),
+    pull.flatten(),
+
+    pull.collect((err, threads) => {
+      t.error(err);
+      t.equals(threads.length, 1, 'has one thread');
+      const [a] = threads;
+      t.equals(a.full, true, '1st thread comes back full');
+      t.equals(a.messages.length, 3, '1st thread has 3 messages');
+      t.equals(a.messages[0].value.content.text, 'A: root', '1st thread is A');
+      ssb.close(t.end);
+    }),
+  );
+});
+
 test('threads.publicSummary gives a simple well-formed summary', (t) => {
   const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
