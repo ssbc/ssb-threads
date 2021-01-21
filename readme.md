@@ -4,7 +4,7 @@
 
 ## Usage
 
-**Requires the backlinks plugin.** If the **ssb-friends** plugin is available it will filter the messages of blocked users.
+If the **ssb-friends** plugin is available it will filter the messages of blocked users.
 
 ```diff
  SecretStack({appKey: require('ssb-caps').shs})
@@ -13,9 +13,7 @@
    .use(require('ssb-replicate'))
    .use(require('ssb-lan'))
    .use(require('ssb-conn'))
-+  .use(require('ssb-backlinks'))
    .use(require('ssb-friends'))
-   .use(require('ssb-private'))
 +  .use(require('ssb-threads'))
    .use(require('ssb-blobs'))
    .use(require('ssb-invite'))
@@ -91,8 +89,6 @@ Returns a ("live") pull stream that emits a message key (strings) for every new 
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
 
 ### `ssb.threads.private(opts)`
-
-**Requires the **ssb-private** plugin to be installed.**
 
 Returns a pull stream that emits thread objects of private conversations.
 
