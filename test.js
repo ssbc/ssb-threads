@@ -463,7 +463,10 @@ test('threads.public ignores threads where root msg is missing', (t) => {
       ssb.db.publish({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, cb);
     }),
     pull.asyncMap((_, cb) => {
-      ssb.db.publish({ type: 'post', text: 'B: 2nd', root: rootAkey.toLowerCase() }, cb);
+      ssb.db.publish(
+        { type: 'post', text: 'B: 2nd', root: rootAkey.toLowerCase() },
+        cb,
+      );
     }),
     pull.asyncMap((_, cb) => {
       ssb.db.publish({ type: 'post', text: 'A: 3rd', root: rootAkey }, cb);
@@ -530,6 +533,47 @@ test('threads.publicSummary gives a simple well-formed summary', (t) => {
 
       ssb.close(t.end);
     }),
+  );
+});
+
+test('threads.publicSummary can handle hundreds of threads', (t) => {
+  const ssb = CreateSSB({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
+    temp: true,
+    name: 'testHundreds',
+    keys: lucyKeys,
+  });
+
+  const TOTAL = 1000
+
+  const roots = [];
+  pull(
+    pull.count(TOTAL),
+    pull.asyncMap((x, cb) => {
+      if (roots.length && Math.random() < 0.7) {
+        const rootMsgKey = roots[Math.floor(Math.random() * roots.length)];
+        ssb.db.publish({ type: 'post', text: 'reply', root: rootMsgKey }, cb);
+      } else {
+        ssb.db.publish({ type: 'post', text: 'root' }, cb);
+      }
+    }),
+    pull.through((msg) => {
+      if (!msg.value.content.root) roots.push(msg.key)
+    }),
+    pull.drain(
+      () => {},
+      () => {
+        pull(
+          ssb.threads.publicSummary({}),
+          pull.collect((err, threads) => {
+            t.error(err);
+            t.pass(`there are ${threads.length} threads`)
+            t.true(threads.length > TOTAL * 0.2, 'many threads')
+            ssb.close(t.end);
+          }),
+        );
+      },
+    ),
   );
 });
 
