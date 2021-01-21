@@ -183,8 +183,8 @@ class threads {
       source,
       pull.asyncMap((id: MsgId, cb: CB<Msg<any>>) => {
         this.ssb.db.getMsg(id, (err: any, msg: Msg) => {
-          if (err) cb(null) // missing msg
-          else cb(err,msg)
+          if (err) cb(null, null as any /* missing msg */);
+          else cb(err, msg);
         });
       }),
       pull.filter(), // remove missing msg
