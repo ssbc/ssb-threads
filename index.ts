@@ -87,6 +87,18 @@ function makeFilterOperator(opts: FilterOpts): any {
   return null;
 }
 
+function makePassesFilter(opts: FilterOpts): (msg: Msg) => boolean {
+  if (opts.allowlist) {
+    return (msg: Msg) =>
+      opts.allowlist!.some((type) => msg?.value?.content?.type === type);
+  }
+  if (opts.blocklist) {
+    return (msg: Msg) =>
+      opts.blocklist!.every((type) => msg?.value?.content?.type !== type);
+  }
+  return () => true
+}
+
 @plugin('2.0.0')
 class threads {
   private readonly ssb: Record<string, any>;
@@ -218,11 +230,12 @@ class threads {
     const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
-    const filter = makeFilterOperator(opts);
+    const filterOperator = makeFilterOperator(opts);
+    const passesFilter = makePassesFilter(opts)
 
     return pull(
       this.ssb.db.query(
-        and(isPublic(), filter),
+        and(isPublic(), filterOperator),
         needsDescending ? descending() : null,
         needsLive ? live({ old }) : null,
         toPullStream(),
@@ -230,11 +243,12 @@ class threads {
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
       this.fetchMsgFromIdIfItExists,
+      pull.filter(passesFilter),
       pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
       pull.take(maxThreads),
-      pull.asyncMap(this.nonBlockedRootToThread(threadMaxSize, filter)),
+      pull.asyncMap(this.nonBlockedRootToThread(threadMaxSize, filterOperator)),
     );
   };
 
@@ -244,12 +258,13 @@ class threads {
     const needsLive = opts.live ?? false;
     const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
-    const filter = makeFilterOperator(opts);
+    const filterOperator = makeFilterOperator(opts);
+    const passesFilter = makePassesFilter(opts)
     const timestamps = new Map<MsgId, number>();
 
     return pull(
       this.ssb.db.query(
-        and(isPublic(), filter),
+        and(isPublic(), filterOperator),
         needsDescending ? descending() : null,
         needsLive ? live({ old }) : null,
         toPullStream(),
@@ -260,25 +275,32 @@ class threads {
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
       this.fetchMsgFromIdIfItExists,
+      pull.filter(passesFilter),
       pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
       pull.take(maxThreads),
-      pull.asyncMap(this.nonBlockedRootToSummary(filter, timestamps)),
+      pull.asyncMap(this.nonBlockedRootToSummary(filterOperator, timestamps)),
     );
   };
 
   @muxrpc('source')
   public publicUpdates = (opts: UpdatesOpts) => {
-    const filter = makeFilterOperator(opts);
+    const filterOperator = makeFilterOperator(opts);
+    const passesFilter = makePassesFilter(opts)
     const includeSelf = opts.includeSelf ?? false;
 
     return pull(
       this.ssb.db.query(
-        and(isPublic(), filter, includeSelf ? null : not(author(this.ssb.id))),
+        and(
+          isPublic(),
+          filterOperator,
+          includeSelf ? null : not(author(this.ssb.id)),
+        ),
         live({ old: false }),
         toPullStream(),
       ),
+      pull.filter(passesFilter),
       this.removeMessagesFromBlocked,
       pull.map((msg: Msg) => msg.key),
     );
@@ -291,11 +313,12 @@ class threads {
     const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
-    const filter = makeFilterOperator(opts);
+    const filterOperator = makeFilterOperator(opts);
+    const passesFilter = makePassesFilter(opts)
 
     return pull(
       this.ssb.db.query(
-        and(isPrivate(), filter),
+        and(isPrivate(), filterOperator),
         needsDescending ? descending() : null,
         needsLive ? live({ old }) : null,
         toPullStream(),
@@ -303,22 +326,29 @@ class threads {
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
       this.fetchMsgFromIdIfItExists,
+      pull.filter(passesFilter),
       pull.filter(isPrivateType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
       pull.take(maxThreads),
-      pull.asyncMap(this.nonBlockedRootToThread(threadMaxSize, filter, true)),
+      pull.asyncMap(
+        this.nonBlockedRootToThread(threadMaxSize, filterOperator, true),
+      ),
     );
   };
 
   @muxrpc('source')
   public privateUpdates = (opts: UpdatesOpts) => {
-    const filter = makeFilterOperator(opts);
+    const filterOperator = makeFilterOperator(opts);
     const includeSelf = opts.includeSelf ?? false;
 
     return pull(
       this.ssb.db.query(
-        and(isPrivate(), filter, includeSelf ? null : not(author(this.ssb.id))),
+        and(
+          isPrivate(),
+          filterOperator,
+          includeSelf ? null : not(author(this.ssb.id)),
+        ),
         live({ old: false }),
         toPullStream(),
       ),
@@ -335,11 +365,12 @@ class threads {
     const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
-    const filter = makeFilterOperator(opts);
+    const filterOperator = makeFilterOperator(opts);
+    const passesFilter = makePassesFilter(opts)
 
     return pull(
       this.ssb.db.query(
-        and(author(id), isPublic(), filter),
+        and(author(id), isPublic(), filterOperator),
         needsDescending ? descending() : null,
         needsLive ? live({ old }) : null,
         toPullStream(),
@@ -347,10 +378,11 @@ class threads {
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
       this.fetchMsgFromIdIfItExists,
+      pull.filter(passesFilter),
       pull.filter(isPublicType),
       this.removeMessagesFromBlocked,
       pull.take(maxThreads),
-      pull.asyncMap(this.nonBlockedRootToThread(threadMaxSize, filter)),
+      pull.asyncMap(this.nonBlockedRootToThread(threadMaxSize, filterOperator)),
     );
   };
 
@@ -361,12 +393,13 @@ class threads {
     const needsLive = opts.live ?? false;
     const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
-    const filter = makeFilterOperator(opts);
+    const filterOperator = makeFilterOperator(opts);
+    const passesFilter = makePassesFilter(opts)
     const timestamps = new Map<MsgId, number>();
 
     return pull(
       this.ssb.db.query(
-        and(author(id), isPublic(), filter),
+        and(author(id), isPublic(), filterOperator),
         needsDescending ? descending() : null,
         needsLive ? live({ old }) : null,
         toPullStream(),
@@ -377,11 +410,12 @@ class threads {
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
       this.fetchMsgFromIdIfItExists,
+      pull.filter(passesFilter),
       pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
       pull.take(maxThreads),
-      pull.asyncMap(this.nonBlockedRootToSummary(filter, timestamps)),
+      pull.asyncMap(this.nonBlockedRootToSummary(filterOperator, timestamps)),
     );
   };
 
@@ -393,24 +427,28 @@ class threads {
       !opts.allowlist && !opts.blocklist
         ? { ...opts, allowlist: ['post'] }
         : opts;
-    const filter = makeFilterOperator(optsOk);
+    const filterOperator = makeFilterOperator(optsOk);
 
     return pull(
       pull.values([opts.root]),
       this.fetchMsgFromIdIfItExists,
       privately ? pull.through() : pull.filter(isPublicType),
-      this.rootToThread(threadMaxSize, filter, privately),
+      this.rootToThread(threadMaxSize, filterOperator, privately),
     );
   };
 
   @muxrpc('source')
   public threadUpdates = (opts: ThreadUpdatesOpts) => {
     const privately = !!opts.private;
-    const filter = makeFilterOperator(opts);
+    const filterOperator = makeFilterOperator(opts);
 
     return pull(
       this.ssb.db.query(
-        and(hasRoot(opts.root), filter, privately ? isPrivate() : isPublic()),
+        and(
+          hasRoot(opts.root),
+          filterOperator,
+          privately ? isPrivate() : isPublic(),
+        ),
         live({ old: false }),
         toPullStream(),
       ),

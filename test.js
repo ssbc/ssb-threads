@@ -309,6 +309,42 @@ test('threads.public respects allowlist opt', (t) => {
   );
 });
 
+test('threads.public applies allowlist to roots too', (t) => {
+  const ssb = CreateSSB({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
+    temp: true,
+    name: 'test3b',
+    keys: lucyKeys,
+  });
+
+  pull(
+    pullAsync((cb) => {
+      ssb.db.publish({ type: 'post', text: 'Thread root' }, cb);
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      ssb.db.publish({ type: 'shout', root: rootMsg, text: 'NOOOOOO' }, cb);
+    }),
+    pull.asyncMap((_prevMsg, cb) => {
+      ssb.db.publish({ type: 'shout', text: 'AAAHHH' }, cb);
+    }),
+    pull.map(() => ssb.threads.public({ allowlist: ['shout'] })),
+    pull.flatten(),
+
+    pull.collect((err, threads) => {
+      t.error(err);
+      t.equals(threads.length, 1, 'only one thread');
+      const thread = threads[0];
+      t.equals(thread.full, true, 'thread comes back full');
+      t.equals(thread.messages.length, 1, 'thread has 1 messages');
+      const msgs = thread.messages;
+      t.equals(msgs[0].value.content.root, undefined, '1st message is root');
+      t.equals(msgs[0].value.content.text, 'AAAHHH');
+      ssb.close();
+      t.end();
+    }),
+  );
+});
+
 test('threads.public respects blocklist opt', (t) => {
   const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
@@ -544,7 +580,7 @@ test('threads.publicSummary can handle hundreds of threads', (t) => {
     keys: lucyKeys,
   });
 
-  const TOTAL = 1000
+  const TOTAL = 1000;
 
   const roots = [];
   pull(
@@ -558,7 +594,7 @@ test('threads.publicSummary can handle hundreds of threads', (t) => {
       }
     }),
     pull.through((msg) => {
-      if (!msg.value.content.root) roots.push(msg.key)
+      if (!msg.value.content.root) roots.push(msg.key);
     }),
     pull.drain(
       () => {},
@@ -567,8 +603,8 @@ test('threads.publicSummary can handle hundreds of threads', (t) => {
           ssb.threads.publicSummary({}),
           pull.collect((err, threads) => {
             t.error(err);
-            t.pass(`there are ${threads.length} threads`)
-            t.true(threads.length > TOTAL * 0.2, 'many threads')
+            t.pass(`there are ${threads.length} threads`);
+            t.true(threads.length > TOTAL * 0.2, 'many threads');
             ssb.close(t.end);
           }),
         );
