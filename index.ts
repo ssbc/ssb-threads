@@ -295,7 +295,7 @@ class threads {
         and(
           isPublic(),
           filterOperator,
-          includeSelf ? null : not(author(this.ssb.id)),
+          includeSelf ? null : not(author(this.ssb.id, {dedicated: true})),
         ),
         live({ old: false }),
         toPullStream(),
@@ -347,7 +347,7 @@ class threads {
         and(
           isPrivate(),
           filterOperator,
-          includeSelf ? null : not(author(this.ssb.id)),
+          includeSelf ? null : not(author(this.ssb.id, {dedicated: true})),
         ),
         live({ old: false }),
         toPullStream(),
