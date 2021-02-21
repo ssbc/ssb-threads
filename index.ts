@@ -30,6 +30,7 @@ const {
   isPublic,
   hasRoot,
   hasFork,
+  paginate,
   toPullStream,
 } = require('ssb-db2/operators');
 
@@ -38,6 +39,12 @@ type CB<T> = (err: any, val?: T) => void;
 const IS_BLOCKING_NEVER = (obj: any, cb: CB<boolean>) => {
   cb(null, false);
 };
+
+/**
+ * 50 msgs kept in memory is rather small (~24kB), but this is large enough to
+ * have good performance in JITDB pagination, see https://github.com/ssb-ngi-pointer/jitdb/pull/123#issuecomment-782734363
+ */
+const PAGESIZE = 50;
 
 function getTimestamp(msg: Msg<any>): number {
   const arrivalTimestamp = msg.timestamp;
@@ -145,9 +152,12 @@ class threads {
                 filter,
                 privately ? isPrivate() : isPublic(),
               ),
+              paginate(PAGESIZE),
               descending(),
               toPullStream(),
             ),
+            pull.map(pull.values),
+            pull.flatten(),
             this.removeMessagesFromBlocked,
             pull.take(maxSize),
           ),
@@ -172,9 +182,12 @@ class threads {
       pull(
         this.ssb.db.query(
           and(or(hasRoot(root.key), hasFork(root.key)), filter),
+          paginate(PAGESIZE),
           descending(),
           toPullStream(),
         ),
+        pull.map(pull.values),
+        pull.flatten(),
         this.removeMessagesFromBlocked,
         pull.collect((err2: any, arr: Array<Msg>) => {
           if (err2) return cb(err2);
@@ -235,8 +248,11 @@ class threads {
       this.ssb.db.query(
         and(isPublic(), filterOperator),
         needsDescending ? descending() : null,
+        paginate(PAGESIZE),
         toPullStream(),
       ),
+      pull.map(pull.values),
+      pull.flatten(),
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
       this.fetchMsgFromIdIfItExists,
@@ -261,8 +277,11 @@ class threads {
       this.ssb.db.query(
         and(isPublic(), filterOperator),
         needsDescending ? descending() : null,
+        paginate(PAGESIZE),
         toPullStream(),
       ),
+      pull.map(pull.values),
+      pull.flatten(),
       pull.through((msg: Msg) =>
         timestamps.set(getRootMsgId(msg), getTimestamp(msg)),
       ),
@@ -312,8 +331,11 @@ class threads {
       this.ssb.db.query(
         and(isPrivate(), filterOperator),
         needsDescending ? descending() : null,
+        paginate(PAGESIZE),
         toPullStream(),
       ),
+      pull.map(pull.values),
+      pull.flatten(),
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
       this.fetchMsgFromIdIfItExists,
@@ -361,8 +383,11 @@ class threads {
       this.ssb.db.query(
         and(author(id), isPublic(), filterOperator),
         needsDescending ? descending() : null,
+        paginate(PAGESIZE),
         toPullStream(),
       ),
+      pull.map(pull.values),
+      pull.flatten(),
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
       this.fetchMsgFromIdIfItExists,
@@ -387,8 +412,11 @@ class threads {
       this.ssb.db.query(
         and(author(id), isPublic(), filterOperator),
         needsDescending ? descending() : null,
+        paginate(PAGESIZE),
         toPullStream(),
       ),
+      pull.map(pull.values),
+      pull.flatten(),
       pull.through((msg: Msg) =>
         timestamps.set(getRootMsgId(msg), getTimestamp(msg)),
       ),
