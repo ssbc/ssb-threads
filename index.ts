@@ -96,7 +96,7 @@ function makePassesFilter(opts: FilterOpts): (msg: Msg) => boolean {
     return (msg: Msg) =>
       opts.blocklist!.every((type) => msg?.value?.content?.type !== type);
   }
-  return () => true
+  return () => true;
 }
 
 @plugin('2.0.0')
@@ -225,19 +225,16 @@ class threads {
 
   @muxrpc('source')
   public public = (opts: Opts) => {
-    const old = opts.old ?? true;
-    const needsLive = opts.live ?? false;
     const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
     const filterOperator = makeFilterOperator(opts);
-    const passesFilter = makePassesFilter(opts)
+    const passesFilter = makePassesFilter(opts);
 
     return pull(
       this.ssb.db.query(
         and(isPublic(), filterOperator),
         needsDescending ? descending() : null,
-        needsLive ? live({ old }) : null,
         toPullStream(),
       ),
       pull.map(getRootMsgId),
@@ -254,19 +251,16 @@ class threads {
 
   @muxrpc('source')
   public publicSummary = (opts: Omit<Opts, 'threadMaxSize'>) => {
-    const old = opts.old ?? true;
-    const needsLive = opts.live ?? false;
     const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const filterOperator = makeFilterOperator(opts);
-    const passesFilter = makePassesFilter(opts)
+    const passesFilter = makePassesFilter(opts);
     const timestamps = new Map<MsgId, number>();
 
     return pull(
       this.ssb.db.query(
         and(isPublic(), filterOperator),
         needsDescending ? descending() : null,
-        needsLive ? live({ old }) : null,
         toPullStream(),
       ),
       pull.through((msg: Msg) =>
@@ -287,7 +281,7 @@ class threads {
   @muxrpc('source')
   public publicUpdates = (opts: UpdatesOpts) => {
     const filterOperator = makeFilterOperator(opts);
-    const passesFilter = makePassesFilter(opts)
+    const passesFilter = makePassesFilter(opts);
     const includeSelf = opts.includeSelf ?? false;
 
     return pull(
@@ -295,7 +289,7 @@ class threads {
         and(
           isPublic(),
           filterOperator,
-          includeSelf ? null : not(author(this.ssb.id, {dedicated: true})),
+          includeSelf ? null : not(author(this.ssb.id, { dedicated: true })),
         ),
         live({ old: false }),
         toPullStream(),
@@ -308,19 +302,16 @@ class threads {
 
   @muxrpc('source')
   public private = (opts: Opts) => {
-    const old = opts.old ?? true;
-    const needsLive = opts.live ?? false;
     const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
     const filterOperator = makeFilterOperator(opts);
-    const passesFilter = makePassesFilter(opts)
+    const passesFilter = makePassesFilter(opts);
 
     return pull(
       this.ssb.db.query(
         and(isPrivate(), filterOperator),
         needsDescending ? descending() : null,
-        needsLive ? live({ old }) : null,
         toPullStream(),
       ),
       pull.map(getRootMsgId),
@@ -347,7 +338,7 @@ class threads {
         and(
           isPrivate(),
           filterOperator,
-          includeSelf ? null : not(author(this.ssb.id, {dedicated: true})),
+          includeSelf ? null : not(author(this.ssb.id, { dedicated: true })),
         ),
         live({ old: false }),
         toPullStream(),
@@ -360,19 +351,16 @@ class threads {
   @muxrpc('source')
   public profile = (opts: ProfileOpts) => {
     const id = opts.id;
-    const old = opts.old ?? true;
-    const needsLive = opts.live ?? false;
     const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
     const filterOperator = makeFilterOperator(opts);
-    const passesFilter = makePassesFilter(opts)
+    const passesFilter = makePassesFilter(opts);
 
     return pull(
       this.ssb.db.query(
         and(author(id), isPublic(), filterOperator),
         needsDescending ? descending() : null,
-        needsLive ? live({ old }) : null,
         toPullStream(),
       ),
       pull.map(getRootMsgId),
@@ -389,19 +377,16 @@ class threads {
   @muxrpc('source')
   public profileSummary = (opts: Omit<ProfileOpts, 'threadMaxSize'>) => {
     const id = opts.id;
-    const old = opts.old ?? true;
-    const needsLive = opts.live ?? false;
     const needsDescending = opts.reverse ?? true;
     const maxThreads = opts.limit ?? Infinity;
     const filterOperator = makeFilterOperator(opts);
-    const passesFilter = makePassesFilter(opts)
+    const passesFilter = makePassesFilter(opts);
     const timestamps = new Map<MsgId, number>();
 
     return pull(
       this.ssb.db.query(
         and(author(id), isPublic(), filterOperator),
         needsDescending ? descending() : null,
-        needsLive ? live({ old }) : null,
         toPullStream(),
       ),
       pull.through((msg: Msg) =>

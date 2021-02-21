@@ -22,8 +22,6 @@ export type FilterOpts = {
 
 export type Opts = {
   limit?: number;
-  old?: boolean;
-  live?: boolean;
   reverse?: boolean;
   threadMaxSize?: number;
 } & FilterOpts;
