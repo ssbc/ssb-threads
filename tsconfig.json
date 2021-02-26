@@ -10,7 +10,7 @@
     "suppressImplicitAnyIndexErrors": true,
     "skipLibCheck": true,
     "module": "commonjs",
-    "target": "es5",
+    "target": "es2018",
     "outDir": "./lib",
     "lib": ["es5", "scripthost", "es2015"]
   },
