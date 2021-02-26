@@ -9,14 +9,11 @@ Version 7.0 and higher **requires ssb-db2** and does not support ssb-db. If the 
 ```diff
  SecretStack({appKey: require('ssb-caps').shs})
    .use(require('ssb-master'))
-   .use(require('ssb-db'))
-   .use(require('ssb-replicate'))
-   .use(require('ssb-lan'))
+   .use(require('ssb-db2'))
    .use(require('ssb-conn'))
    .use(require('ssb-friends'))
 +  .use(require('ssb-threads'))
    .use(require('ssb-blobs'))
-   .use(require('ssb-invite'))
    .call(null, config)
 ```
 
