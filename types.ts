@@ -21,7 +21,6 @@ export type FilterOpts = {
 };
 
 export type Opts = {
-  limit?: number;
   reverse?: boolean;
   threadMaxSize?: number;
 } & FilterOpts;

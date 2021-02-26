@@ -239,7 +239,6 @@ class threads {
   @muxrpc('source')
   public public = (opts: Opts) => {
     const needsDescending = opts.reverse ?? true;
-    const maxThreads = opts.limit ?? Infinity;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
     const filterOperator = makeFilterOperator(opts);
     const passesFilter = makePassesFilter(opts);
@@ -260,7 +259,6 @@ class threads {
       pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
-      pull.take(maxThreads),
       pull.asyncMap(this.nonBlockedRootToThread(threadMaxSize, filterOperator)),
     );
   };
@@ -268,7 +266,6 @@ class threads {
   @muxrpc('source')
   public publicSummary = (opts: Omit<Opts, 'threadMaxSize'>) => {
     const needsDescending = opts.reverse ?? true;
-    const maxThreads = opts.limit ?? Infinity;
     const filterOperator = makeFilterOperator(opts);
     const passesFilter = makePassesFilter(opts);
     const timestamps = new Map<MsgId, number>();
@@ -292,7 +289,6 @@ class threads {
       pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
-      pull.take(maxThreads),
       pull.asyncMap(this.nonBlockedRootToSummary(filterOperator, timestamps)),
     );
   };
@@ -322,7 +318,6 @@ class threads {
   @muxrpc('source')
   public private = (opts: Opts) => {
     const needsDescending = opts.reverse ?? true;
-    const maxThreads = opts.limit ?? Infinity;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
     const filterOperator = makeFilterOperator(opts);
     const passesFilter = makePassesFilter(opts);
@@ -343,7 +338,6 @@ class threads {
       pull.filter(isPrivateType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
-      pull.take(maxThreads),
       pull.asyncMap(
         this.nonBlockedRootToThread(threadMaxSize, filterOperator, true),
       ),
@@ -374,7 +368,6 @@ class threads {
   public profile = (opts: ProfileOpts) => {
     const id = opts.id;
     const needsDescending = opts.reverse ?? true;
-    const maxThreads = opts.limit ?? Infinity;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
     const filterOperator = makeFilterOperator(opts);
     const passesFilter = makePassesFilter(opts);
@@ -394,7 +387,6 @@ class threads {
       pull.filter(passesFilter),
       pull.filter(isPublicType),
       this.removeMessagesFromBlocked,
-      pull.take(maxThreads),
       pull.asyncMap(this.nonBlockedRootToThread(threadMaxSize, filterOperator)),
     );
   };
@@ -403,7 +395,6 @@ class threads {
   public profileSummary = (opts: Omit<ProfileOpts, 'threadMaxSize'>) => {
     const id = opts.id;
     const needsDescending = opts.reverse ?? true;
-    const maxThreads = opts.limit ?? Infinity;
     const filterOperator = makeFilterOperator(opts);
     const passesFilter = makePassesFilter(opts);
     const timestamps = new Map<MsgId, number>();
@@ -427,7 +418,6 @@ class threads {
       pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
-      pull.take(maxThreads),
       pull.asyncMap(this.nonBlockedRootToSummary(filterOperator, timestamps)),
     );
   };
