@@ -36,7 +36,7 @@
     "pull-notify": "^0.1.1",
     "secret-stack": "6.3.2",
     "ssb-caps": "^1.1.0",
-    "ssb-db2": "^1.17.0",
+    "ssb-db2": "^2.0.2",
     "ssb-keys": "8.1.0",
     "ssb-validate": "^4.1.4",
     "tape": "^5.2.2",

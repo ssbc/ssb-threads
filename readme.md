@@ -4,7 +4,7 @@
 
 ## Usage
 
-Version 7.0 and higher **requires ssb-db2** and does not support ssb-db. If the **ssb-friends** plugin is available it will filter the messages of blocked users.
+This plugin's version 8.0 **requires ssb-db2 v2.0.2 or higher** and does not support ssb-db. If the **ssb-friends** plugin is available it will filter the messages of blocked users.
 
 ```diff
  SecretStack({appKey: require('ssb-caps').shs})

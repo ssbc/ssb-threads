@@ -19,6 +19,7 @@ const cat = require('pull-cat');
 const sort = require('ssb-sort');
 const Ref = require('ssb-ref');
 const {
+  where,
   and,
   or,
   not,
@@ -147,10 +148,12 @@ class threads {
           pull.values([root]),
           pull(
             this.ssb.db.query(
-              and(
-                hasRoot(root.key),
-                filter,
-                privately ? isPrivate() : isPublic(),
+              where(
+                and(
+                  hasRoot(root.key),
+                  filter,
+                  privately ? isPrivate() : isPublic(),
+                ),
               ),
               paginate(PAGESIZE),
               descending(),
@@ -181,7 +184,7 @@ class threads {
     return (root: Msg, cb: CB<ThreadSummary>) => {
       pull(
         this.ssb.db.query(
-          and(or(hasRoot(root.key), hasFork(root.key)), filter),
+          where(and(or(hasRoot(root.key), hasFork(root.key)), filter)),
           paginate(PAGESIZE),
           descending(),
           toPullStream(),
@@ -245,7 +248,7 @@ class threads {
 
     return pull(
       this.ssb.db.query(
-        and(isPublic(), filterOperator),
+        where(and(isPublic(), filterOperator)),
         needsDescending ? descending() : null,
         paginate(PAGESIZE),
         toPullStream(),
@@ -272,7 +275,7 @@ class threads {
 
     return pull(
       this.ssb.db.query(
-        and(isPublic(), filterOperator),
+        where(and(isPublic(), filterOperator)),
         needsDescending ? descending() : null,
         paginate(PAGESIZE),
         toPullStream(),
@@ -301,10 +304,12 @@ class threads {
 
     return pull(
       this.ssb.db.query(
-        and(
-          isPublic(),
-          filterOperator,
-          includeSelf ? null : not(author(this.ssb.id, { dedicated: true })),
+        where(
+          and(
+            isPublic(),
+            filterOperator,
+            includeSelf ? null : not(author(this.ssb.id, { dedicated: true })),
+          ),
         ),
         live({ old: false }),
         toPullStream(),
@@ -324,7 +329,7 @@ class threads {
 
     return pull(
       this.ssb.db.query(
-        and(isPrivate(), filterOperator),
+        where(and(isPrivate(), filterOperator)),
         needsDescending ? descending() : null,
         paginate(PAGESIZE),
         toPullStream(),
@@ -351,10 +356,12 @@ class threads {
 
     return pull(
       this.ssb.db.query(
-        and(
-          isPrivate(),
-          filterOperator,
-          includeSelf ? null : not(author(this.ssb.id, { dedicated: true })),
+        where(
+          and(
+            isPrivate(),
+            filterOperator,
+            includeSelf ? null : not(author(this.ssb.id, { dedicated: true })),
+          ),
         ),
         live({ old: false }),
         toPullStream(),
@@ -374,7 +381,7 @@ class threads {
 
     return pull(
       this.ssb.db.query(
-        and(author(id), isPublic(), filterOperator),
+        where(and(author(id), isPublic(), filterOperator)),
         needsDescending ? descending() : null,
         paginate(PAGESIZE),
         toPullStream(),
@@ -401,7 +408,7 @@ class threads {
 
     return pull(
       this.ssb.db.query(
-        and(author(id), isPublic(), filterOperator),
+        where(and(author(id), isPublic(), filterOperator)),
         needsDescending ? descending() : null,
         paginate(PAGESIZE),
         toPullStream(),
@@ -447,10 +454,12 @@ class threads {
 
     return pull(
       this.ssb.db.query(
-        and(
-          hasRoot(opts.root),
-          filterOperator,
-          privately ? isPrivate() : isPublic(),
+        where(
+          and(
+            hasRoot(opts.root),
+            filterOperator,
+            privately ? isPrivate() : isPublic(),
+          ),
         ),
         live({ old: false }),
         toPullStream(),
