@@ -45,8 +45,8 @@
   },
   "scripts": {
     "compile": "tsc",
-    "pretest": "npm run compile",
-    "test": "tape test.js | faucet",
+    "tape": "tape test.js | faucet",
+    "test": "npm run compile && npm run tape",
     "coverage": "nyc npm run test"
   }
 }
