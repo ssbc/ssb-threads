@@ -25,7 +25,8 @@
     "ssb-typescript": "~2.5.0"
   },
   "peerDependencies": {
-    "ssb-db2": ">=1.0.0"
+    "ssb-db2": ">=2.2.0",
+    "jitdb": ">=3.2.0"
   },
   "devDependencies": {
     "@types/node": "^14.14.37",
