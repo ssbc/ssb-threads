@@ -16,6 +16,9 @@
   "engines": {
     "node": ">=8"
   },
+  "files": [
+    "lib/*"
+  ],
   "dependencies": {
     "pull-cat": "^1.1.11",
     "pull-stream": "^3.6.2",
