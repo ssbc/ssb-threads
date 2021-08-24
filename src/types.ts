@@ -13,7 +13,7 @@ export type ThreadSummary = {
    * Timestamp of the latest post in this thread
    */
   timestamp: number;
-}
+};
 
 export type FilterOpts = {
   allowlist?: Array<string>;
