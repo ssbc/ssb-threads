@@ -12,7 +12,7 @@ const cat = require('pull-cat');
 
 const CreateSSB = SecretStack({ appKey: caps.shs })
   .use(require('ssb-db2'))
-  .use(require('./lib/index'));
+  .use(require('../lib/index'));
 
 const lucyKeys = ssbKeys.generate();
 const maryKeys = ssbKeys.generate();

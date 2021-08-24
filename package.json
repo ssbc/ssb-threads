@@ -40,7 +40,7 @@
     "pull-notify": "^0.1.1",
     "secret-stack": "6.4.0",
     "ssb-caps": "^1.1.0",
-    "ssb-db2": "^2.2.0",
+    "ssb-db2": "^2.3.0",
     "ssb-keys": "8.2.0",
     "ssb-validate": "^4.1.4",
     "tape": "^5.2.2",
@@ -49,7 +49,7 @@
   },
   "scripts": {
     "compile": "tsc",
-    "tape": "tape test.js | faucet",
+    "tape": "tape test/index.js | faucet",
     "test": "npm run compile && npm run tape",
     "coverage": "nyc npm run test"
   }
