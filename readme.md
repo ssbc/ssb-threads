@@ -80,6 +80,16 @@ Returns a ("live") pull stream that emits a message key (strings) for every new 
 * `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
 
+### `ssb.threads.hashtagSummary(opts)`
+
+Similar to `publicSummary` but limits the results to public threads that match a specific hashtag `opts.hashtag`. "Hashtag" here means `msg.value.content.channel` and `msg.value.content.mentions[].link` (beginning with `#`).
+
+* `opts.hashtag`: string, required. This is a short hashtag string such as `#animals` that identifies which content category we are interested in.
+* `opts.reverse`: boolean, default `true`. `false` means threads will be delivered from oldest to most recent, `true` means they will be delivered from most recent to oldest.
+* `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
+* `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
+
+
 ### `ssb.threads.private(opts)`
 
 Returns a pull stream that emits thread objects of private conversations.

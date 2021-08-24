@@ -25,6 +25,12 @@ export type Opts = {
   threadMaxSize?: number;
 } & FilterOpts;
 
+export type HashtagOpts = {
+  reverse?: boolean;
+  hashtag: string;
+  threadMaxSize?: number;
+} & FilterOpts;
+
 export type UpdatesOpts = {
   includeSelf?: boolean;
 } & FilterOpts;

@@ -761,6 +761,126 @@ test('threads.publicUpdates respects includeSelf opt', (t) => {
   );
 });
 
+test('threads.hashtagSummary understands msg.value.content.channel', (t) => {
+  const ssb = CreateSSB({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test-hashtag1')),
+    temp: true,
+    name: 'test1',
+    keys: lucyKeys,
+  });
+
+  pull(
+    pullAsync((cb) => {
+      ssb.db.publish(
+        { type: 'post', text: 'Pizza', channel: 'food' },
+        (err, x) => {
+          setTimeout(() => {
+            cb(err, x);
+          }, 100);
+        },
+      );
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      ssb.db.publish(
+        { type: 'post', text: 'pepperoni', root: rootMsg.key },
+        (err, x) => {
+          setTimeout(() => {
+            cb(err, x);
+          }, 100);
+        },
+      );
+    }),
+    pull.asyncMap((prevMsg, cb) => {
+      ssb.db.publish({ type: 'post', text: 'Third message' }, (err) => {
+        setTimeout(() => {
+          cb(err, null);
+        }, 100);
+      });
+    }),
+    pull.map(() => ssb.threads.hashtagSummary({ hashtag: 'food' })),
+    pull.flatten(),
+
+    pull.collect((err, summaries) => {
+      t.error(err);
+      t.equals(summaries.length, 1, 'only one summary');
+      const summary = summaries[0];
+      t.equals(summary.replyCount, 1, 'summary counts 1 reply');
+      t.true(
+        summary.timestamp > summary.root.timestamp,
+        'summary timestamp greater than root timestamp',
+      );
+      t.equals(
+        summary.root.value.content.root,
+        undefined,
+        'root message is root',
+      );
+      t.equals(summary.root.value.content.text, 'Pizza');
+
+      ssb.close(t.end);
+    }),
+  );
+});
+
+test('threads.hashtagSummary understands msg.value.content.mentions', (t) => {
+  const ssb = CreateSSB({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test-hashtag2')),
+    temp: true,
+    name: 'test1',
+    keys: lucyKeys,
+  });
+
+  pull(
+    pullAsync((cb) => {
+      ssb.db.publish(
+        { type: 'post', text: 'Dog', mentions: [{ link: '#animals' }] },
+        (err, x) => {
+          setTimeout(() => {
+            cb(err, x);
+          }, 100);
+        },
+      );
+    }),
+    pull.asyncMap((rootMsg, cb) => {
+      ssb.db.publish(
+        { type: 'post', text: 'poodle', root: rootMsg.key },
+        (err, x) => {
+          setTimeout(() => {
+            cb(err, x);
+          }, 100);
+        },
+      );
+    }),
+    pull.asyncMap((prevMsg, cb) => {
+      ssb.db.publish({ type: 'post', text: 'Cat' }, (err) => {
+        setTimeout(() => {
+          cb(err, null);
+        }, 100);
+      });
+    }),
+    pull.map(() => ssb.threads.hashtagSummary({ hashtag: 'animals' })),
+    pull.flatten(),
+
+    pull.collect((err, summaries) => {
+      t.error(err);
+      t.equals(summaries.length, 1, 'only one summary');
+      const summary = summaries[0];
+      t.equals(summary.replyCount, 1, 'summary counts 1 reply');
+      t.true(
+        summary.timestamp > summary.root.timestamp,
+        'summary timestamp greater than root timestamp',
+      );
+      t.equals(
+        summary.root.value.content.root,
+        undefined,
+        'root message is root',
+      );
+      t.equals(summary.root.value.content.text, 'Dog');
+
+      ssb.close(t.end);
+    }),
+  );
+});
+
 test('threads.profile gives threads for lucy not mary', (t) => {
   const ssb = CreateSSB({
     path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),

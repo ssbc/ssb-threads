@@ -20,16 +20,18 @@
     "lib/*"
   ],
   "dependencies": {
+    "bipf": "^1.5.1",
     "pull-cat": "^1.1.11",
+    "pull-level": "^2.0.4",
     "pull-stream": "^3.6.2",
     "secret-stack-decorators": "1.1.0",
     "ssb-ref": "^2.13.0",
     "ssb-sort": "1.1.x",
-    "ssb-typescript": "~2.5.0"
+    "ssb-typescript": "~2.5.0",
+    "ssb-db2": "^2.3.0"
   },
   "peerDependencies": {
-    "ssb-db2": ">=2.2.0",
-    "jitdb": ">=3.2.0"
+    "jitdb": ">=3.3.0"
   },
   "devDependencies": {
     "@types/node": "^14.14.37",

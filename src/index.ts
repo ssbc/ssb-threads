@@ -13,6 +13,7 @@ import {
   FilterOpts,
   ThreadUpdatesOpts,
   ThreadSummary,
+  HashtagOpts,
 } from './types';
 const pull = require('pull-stream');
 const cat = require('pull-cat');
@@ -34,6 +35,8 @@ const {
   hasFork,
   toPullStream,
 } = require('ssb-db2/operators');
+import HashtagsPlugin = require('./hashtags');
+const hasHashtag = HashtagsPlugin.operator;
 
 type CB<T> = (err: any, val?: T) => void;
 
@@ -117,6 +120,7 @@ class threads {
     this.isBlocking = ssb.friends?.isBlocking
       ? ssb.friends.isBlocking
       : IS_BLOCKING_NEVER;
+    this.ssb.db.registerIndex(HashtagsPlugin);
   }
 
   //#region PRIVATE
@@ -190,7 +194,10 @@ class threads {
         this.removeMessagesFromBlocked,
         pull.collect((err2: any, arr: Array<Msg>) => {
           if (err2) return cb(err2);
-          const timestamp = timestamps.get(root.key) ?? root.timestamp;
+          const timestamp = Math.max(
+            timestamps.get(root.key) ?? 0,
+            ...arr.map(getTimestamp),
+          );
           cb(null, { root, replyCount: arr.length, timestamp });
         }),
       );
@@ -309,6 +316,34 @@ class threads {
       pull.filter(passesFilter),
       this.removeMessagesFromBlocked,
       pull.map((msg: Msg) => msg.key),
+    );
+  };
+
+  @muxrpc('source')
+  public hashtagSummary = (opts: Omit<HashtagOpts, 'threadMaxSize'>) => {
+    const needsDescending = opts.reverse ?? true;
+    const filterOperator = makeFilterOperator(opts);
+    const passesFilter = makePassesFilter(opts);
+    const timestamps = new Map<MsgId, number>();
+
+    return pull(
+      this.ssb.db.query(
+        where(and(isPublic(), hasHashtag(opts.hashtag), filterOperator)),
+        needsDescending ? descending() : null,
+        batch(BATCH_SIZE),
+        toPullStream(),
+      ),
+      pull.through((msg: Msg) =>
+        timestamps.set(getRootMsgId(msg), getTimestamp(msg)),
+      ),
+      pull.map(getRootMsgId),
+      pull.filter(isUniqueMsgId(new Set())),
+      this.fetchMsgFromIdIfItExists,
+      pull.filter(passesFilter),
+      pull.filter(isPublicType),
+      pull.filter(hasNoBacklinks),
+      this.removeMessagesFromBlocked,
+      pull.asyncMap(this.nonBlockedRootToSummary(filterOperator, timestamps)),
     );
   };
 
