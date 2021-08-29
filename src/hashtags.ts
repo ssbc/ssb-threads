@@ -93,7 +93,7 @@ export = class HashtagPlugin extends DB2Plugin {
     pull(
       pl.read(this.level, {
         gte: [label, ''],
-        lte: [label + '~', undefined],
+        lte: [label, undefined],
         keys: true,
         keyEncoding: this.keyEncoding,
         values: false,
