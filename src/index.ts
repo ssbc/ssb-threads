@@ -88,7 +88,7 @@ function hasNoBacklinks(msg: Msg<any>): boolean {
 
 function makeFilterOperator(opts: FilterOpts): any {
   if (opts.allowlist) {
-    const allowedTypes = opts.allowlist.map(type);
+    const allowedTypes = opts.allowlist.map((x) => type(x));
     return or(...allowedTypes);
   }
   if (opts.blocklist) {
