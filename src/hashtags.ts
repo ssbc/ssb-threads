@@ -11,14 +11,16 @@ const B_CHANNEL = Buffer.from('channel');
 const B_MENTIONS = Buffer.from('mentions');
 
 function sanitize(hashtag: string) {
-  return hashtag.startsWith('#') ? hashtag.slice(1) : hashtag;
+  return hashtag.startsWith('#')
+    ? hashtag.slice(1).toLocaleLowerCase()
+    : hashtag.toLocaleLowerCase();
 }
 
 type LevelKey = [string, number];
 type LevelValue = Buffer;
 
 const INDEX_NAME = 'hashtags';
-const INDEX_VERSION = 1;
+const INDEX_VERSION = 2;
 
 // [hashtagLabel, seq] => B_0
 export = class HashtagPlugin extends DB2Plugin {
