@@ -27,8 +27,8 @@
     "secret-stack-decorators": "1.1.0",
     "ssb-ref": "^2.13.0",
     "ssb-sort": "1.1.x",
-    "ssb-typescript": "~2.5.0",
-    "ssb-db2": "^2.8.3"
+    "ssb-typescript": "^2.5.0",
+    "ssb-db2": "^3.0.0"
   },
   "peerDependencies": {
     "jitdb": ">=3.3.0"
