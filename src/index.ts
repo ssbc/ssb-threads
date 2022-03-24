@@ -141,6 +141,22 @@ class threads {
       pull.filter(),
     );
 
+  private removeMessagesWhereRootIsMissing =
+    (passesFilter: (msg: Msg) => boolean) => (source: any) =>
+      pull(
+        source,
+        pull.asyncMap((msg: Msg, cb: CB<Msg | null>) => {
+          const rootMsgKey = getRootMsgId(msg);
+          if (rootMsgKey === msg.key) return cb(null, msg);
+          this.ssb.db.getMsg(rootMsgKey, (err: any, rootMsg: Msg) => {
+            if (err) cb(null, null);
+            else if (passesFilter(rootMsg)) cb(null, msg);
+            else cb(null, null);
+          });
+        }),
+        pull.filter((msg: Msg | null) => msg !== null),
+      );
+
   private nonBlockedRootToThread = (
     maxSize: number,
     filter: any,
@@ -205,9 +221,8 @@ class threads {
   };
 
   /**
-   * Returns a pull-stream operator that:
-   * 1. Checks if there is a Msg in the cache for the source MsgId
-   * 2. If not in the cache, do a database lookup
+   * Returns a pull-stream operator that maps the source of message keys
+   * to their respective root messages, if the roots are in the database.
    */
   private fetchMsgFromIdIfItExists = (source: any) =>
     pull(
@@ -313,8 +328,8 @@ class threads {
         live({ old: false }),
         toPullStream(),
       ),
-      pull.filter(passesFilter),
       this.removeMessagesFromBlocked,
+      this.removeMessagesWhereRootIsMissing(passesFilter),
       pull.map((msg: Msg) => msg.key),
     );
   };

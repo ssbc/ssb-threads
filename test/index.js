@@ -17,9 +17,9 @@ const CreateSSB = SecretStack({ appKey: caps.shs })
 const lucyKeys = ssbKeys.generate();
 const maryKeys = ssbKeys.generate();
 
-function wait(cb) {
+function wait(cb, period = 300) {
   return (err, data) => {
-    setTimeout(() => cb(err, data), 300);
+    setTimeout(() => cb(err, data), period);
   };
 }
 
@@ -652,35 +652,37 @@ test('threads.publicUpdates notifies of new thread or new msg', (t) => {
     Date.now() + 3,
   );
 
-  let updates = 0;
+  let updates = [];
 
   let liveDrainer;
   pull(
     ssb.threads.publicUpdates({}),
-    (liveDrainer = pull.drain(() => {
-      updates++;
+    (liveDrainer = pull.drain((msgKey) => {
+      updates.push(msgKey);
     })),
   );
 
   pull(
     pullAsync((cb) => {
-      ssb.db.add(state.queue[0].value, wait(cb));
+      ssb.db.add(state.queue[0].value, wait(cb, 800));
     }),
     pull.asyncMap((_, cb) => {
-      t.equals(updates, 0);
-      ssb.db.add(state.queue[1].value, wait(cb));
+      t.equals(updates.length, 0);
+      ssb.db.add(state.queue[1].value, wait(cb, 800));
     }),
     pull.asyncMap((_, cb) => {
-      t.equals(updates, 1);
-      ssb.db.add(state.queue[2].value, wait(cb));
+      t.equals(updates.length, 1);
+      t.equals(updates[0], state.queue[1].key);
+      ssb.db.add(state.queue[2].value, wait(cb, 800));
     }),
     pull.asyncMap((_, cb) => {
-      t.equals(updates, 2);
-      ssb.db.add(state.queue[3].value, wait(cb));
+      t.equals(updates.length, 2);
+      t.equals(updates[1], state.queue[2].key);
+      ssb.db.add(state.queue[3].value, wait(cb, 800));
     }),
 
     pull.drain(() => {
-      t.equals(updates, 2, 'total updates');
+      t.equals(updates.length, 2, 'total updates');
       liveDrainer.abort();
       ssb.close(t.end);
     }),
@@ -738,23 +740,93 @@ test('threads.publicUpdates respects includeSelf opt', (t) => {
 
   pull(
     pullAsync((cb) => {
-      ssb.db.add(state.queue[0].value, wait(cb));
+      ssb.db.add(state.queue[0].value, wait(cb, 800));
     }),
     pull.asyncMap((_, cb) => {
       t.equals(updates, 1);
-      ssb.db.add(state.queue[1].value, wait(cb));
+      ssb.db.add(state.queue[1].value, wait(cb, 800));
     }),
     pull.asyncMap((_, cb) => {
       t.equals(updates, 2);
-      ssb.db.add(state.queue[2].value, wait(cb));
+      ssb.db.add(state.queue[2].value, wait(cb, 800));
     }),
     pull.asyncMap((_, cb) => {
       t.equals(updates, 3);
-      ssb.db.add(state.queue[3].value, wait(cb));
+      ssb.db.add(state.queue[3].value, wait(cb, 800));
     }),
 
     pull.drain(() => {
       t.equals(updates, 4, 'total updates');
+      liveDrainer.abort();
+      ssb.close(t.end);
+    }),
+  );
+});
+
+test('threads.publicUpdates ignores replies to unknown roots', (t) => {
+  const ssb = CreateSSB({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
+    temp: true,
+    name: 'test8',
+    keys: lucyKeys,
+  });
+
+  let state = validate.initial();
+
+  state = validate.appendNew(
+    state,
+    null,
+    lucyKeys,
+    { type: 'post', text: 'A: root' },
+    Date.now(),
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    maryKeys,
+    { type: 'post', text: 'A: 2nd', root: state.queue[0].key },
+    Date.now() + 1,
+  );
+  state = validate.appendNew(
+    state,
+    null,
+    maryKeys,
+    {
+      type: 'post',
+      text: 'B: 2nd',
+      root: `%${Buffer.alloc(32, 'deadbeef').toString('base64')}.sha256`,
+    },
+    Date.now() + 2,
+  );
+
+  let updates = [];
+
+  let liveDrainer;
+  pull(
+    ssb.threads.publicUpdates({}),
+    (liveDrainer = pull.drain((msgKey) => {
+      updates.push(msgKey);
+    })),
+  );
+
+  pull(
+    pullAsync((cb) => {
+      ssb.db.add(state.queue[0].value, wait(cb, 800));
+    }),
+    pull.asyncMap((_, cb) => {
+      t.equals(updates.length, 0);
+
+      ssb.db.add(state.queue[1].value, wait(cb, 800));
+    }),
+    pull.asyncMap((_, cb) => {
+      t.equals(updates.length, 1);
+      t.equals(updates[0], state.queue[1].key);
+
+      ssb.db.add(state.queue[2].value, wait(cb, 800));
+    }),
+
+    pull.drain(() => {
+      t.equals(updates.length, 1, 'total updates');
       liveDrainer.abort();
       ssb.close(t.end);
     }),
