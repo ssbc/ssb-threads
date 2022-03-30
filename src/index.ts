@@ -45,10 +45,11 @@ const IS_BLOCKING_NEVER = (obj: any, cb: CB<boolean>) => {
 };
 
 /**
- * 75 msgs kept in memory is rather small (~36kB), but this is large enough to
- * have good performance in JITDB pagination, see https://github.com/ssb-ngi-pointer/jitdb/pull/123#issuecomment-782734363
+ * 100 msgs kept in memory is rather small (~50kB), but this is large enough to
+ * have good performance in JITDB pagination, see
+ * https://github.com/ssb-ngi-pointer/jitdb/pull/123#issuecomment-782734363
  */
-const BATCH_SIZE = 75;
+const BATCH_SIZE = 100;
 
 function getTimestamp(msg: Msg<any>): number {
   const arrivalTimestamp = msg.timestamp;
