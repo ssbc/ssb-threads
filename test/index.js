@@ -462,7 +462,7 @@ test('threads.public sorts threads by recency', (t) => {
     pull.asyncMap((_, cb) => {
       ssb.db.publish(
         { type: 'post', text: 'A: 3rd', root: rootAkey },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
 
