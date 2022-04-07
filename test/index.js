@@ -460,7 +460,10 @@ test('threads.public sorts threads by recency', (t) => {
       ssb.db.publish({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, cb);
     }),
     pull.asyncMap((_, cb) => {
-      ssb.db.publish({ type: 'post', text: 'A: 3rd', root: rootAkey }, cb);
+      ssb.db.publish(
+        { type: 'post', text: 'A: 3rd', root: rootAkey },
+        wait(cb),
+      );
     }),
 
     pull.map(() => ssb.threads.public({ reverse: true })),
