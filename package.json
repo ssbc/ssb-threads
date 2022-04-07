@@ -25,10 +25,10 @@
     "pull-level": "^2.0.4",
     "pull-stream": "^3.6.2",
     "secret-stack-decorators": "1.1.0",
+    "ssb-db2": "^3.4.1",
     "ssb-ref": "^2.13.0",
     "ssb-sort": "1.1.x",
-    "ssb-typescript": "^2.5.0",
-    "ssb-db2": "^3.0.0"
+    "ssb-typescript": "^2.5.0"
   },
   "peerDependencies": {
     "jitdb": ">=3.3.0"
@@ -38,11 +38,9 @@
     "faucet": "0.0.1",
     "nyc": "^15.0.0",
     "pull-async": "1.0.0",
-    "pull-cat": "1.1.11",
     "pull-notify": "^0.1.1",
     "secret-stack": "6.4.1",
     "ssb-caps": "^1.1.0",
-    "ssb-db2": "^3.3.0",
     "ssb-keys": "8.2.0",
     "ssb-validate": "^4.1.4",
     "tape": "^5.2.2",
