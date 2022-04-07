@@ -5,7 +5,6 @@ const DB2Plugin = require('ssb-db2/indexes/plugin');
 const { seqs, deferred } = require('ssb-db2/operators');
 
 const B_0 = Buffer.alloc(0);
-const B_VALUE = Buffer.from('value');
 const B_CONTENT = Buffer.from('content');
 const B_CHANNEL = Buffer.from('channel');
 const B_MENTIONS = Buffer.from('mentions');
@@ -37,10 +36,8 @@ export = class HashtagPlugin extends DB2Plugin {
     });
   }
 
-  processRecord(record: { value: Buffer; offset: number }, seq: number) {
+  processRecord(record: { value: Buffer; offset: number }, seq: number, pValue: number) {
     const buf = record.value;
-    const pValue = bipf.seekKey(buf, 0, B_VALUE);
-    if (pValue < 0) return;
     const pValueContent = bipf.seekKey(buf, pValue, B_CONTENT);
     if (pValueContent < 0) return;
     const pValueContentChannel = bipf.seekKey(buf, pValueContent, B_CHANNEL);
