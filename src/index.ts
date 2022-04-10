@@ -87,6 +87,10 @@ function hasNoBacklinks(msg: Msg<any>): boolean {
   );
 }
 
+function notNull(x: any): boolean {
+  return x !== null;
+}
+
 function makeFilterOperator(opts: FilterOpts): any {
   if (opts.allowlist) {
     const allowedTypes = opts.allowlist.map((x) => type(x));
@@ -139,7 +143,7 @@ class threads {
           },
         );
       }),
-      pull.filter(),
+      pull.filter(notNull),
     );
 
   private removeMessagesWhereRootIsMissing =
@@ -155,7 +159,7 @@ class threads {
             else cb(null, null);
           });
         }),
-        pull.filter((msg: Msg | null) => msg !== null),
+        pull.filter(notNull),
       );
 
   private nonBlockedRootToThread = (
@@ -185,8 +189,8 @@ class threads {
           ),
         ]),
         pull.take(maxSize + 1),
-        pull.collect((err2: any, arr: Array<Msg>) => {
-          if (err2) return cb(err2);
+        pull.collect((err: any, arr: Array<Msg>) => {
+          if (err) return cb(err);
           const full = arr.length <= maxSize;
           sort(arr);
           if (arr.length > maxSize && arr.length >= 3) arr.splice(1, 1);
@@ -209,8 +213,8 @@ class threads {
           toPullStream(),
         ),
         this.removeMessagesFromBlocked,
-        pull.collect((err2: any, arr: Array<Msg>) => {
-          if (err2) return cb(err2);
+        pull.collect((err: any, arr: Array<Msg>) => {
+          if (err) return cb(err);
           const timestamp = Math.max(
             timestamps.get(root.key) ?? 0,
             ...arr.map(getTimestamp),
@@ -234,7 +238,7 @@ class threads {
           else cb(err, msg);
         });
       }),
-      pull.filter(), // remove missing msg
+      pull.filter(notNull),
     );
 
   private rootToThread = (maxSize: number, filter: any, privately: boolean) => {
