@@ -146,7 +146,7 @@ class threads {
       pull.filter(notNull),
     );
 
-  private removeMessagesWhereRootIsMissing =
+  private removeMessagesWhereRootIsMissingOrBlocked =
     (passesFilter: (msg: Msg) => boolean) => (source: any) =>
       pull(
         source,
@@ -155,8 +155,17 @@ class threads {
           if (rootMsgKey === msg.key) return cb(null, msg);
           this.ssb.db.getMsg(rootMsgKey, (err: any, rootMsg: Msg) => {
             if (err) cb(null, null);
-            else if (passesFilter(rootMsg)) cb(null, msg);
-            else cb(null, null);
+            else if (!passesFilter(rootMsg)) cb(null, null);
+            else {
+              this.isBlocking(
+                { source: this.ssb.id, dest: rootMsg.value.author },
+                (err, blocking: boolean) => {
+                  if (err) cb(null, null);
+                  else if (blocking) cb(null, null);
+                  else cb(null, msg);
+                },
+              );
+            }
           });
         }),
         pull.filter(notNull),
@@ -334,7 +343,7 @@ class threads {
         toPullStream(),
       ),
       this.removeMessagesFromBlocked,
-      this.removeMessagesWhereRootIsMissing(passesFilter),
+      this.removeMessagesWhereRootIsMissingOrBlocked(passesFilter),
       pull.map((msg: Msg) => msg.key),
     );
   };
