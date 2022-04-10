@@ -35,8 +35,8 @@
   },
   "devDependencies": {
     "@types/node": "^14.14.37",
+    "c8": "^7.11.0",
     "faucet": "0.0.1",
-    "nyc": "^15.0.0",
     "pull-async": "1.0.0",
     "pull-notify": "^0.1.1",
     "secret-stack": "6.4.1",
@@ -51,6 +51,6 @@
     "compile": "tsc",
     "tape": "tape test/index.js | faucet",
     "test": "npm run compile && npm run tape",
-    "coverage": "nyc npm run test"
+    "coverage": "c8 --reporter=lcov npm run test"
   }
 }
