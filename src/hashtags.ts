@@ -5,9 +5,9 @@ const DB2Plugin = require('ssb-db2/indexes/plugin');
 const { seqs, deferred } = require('ssb-db2/operators');
 
 const B_0 = Buffer.alloc(0);
-const B_CONTENT = Buffer.from('content');
-const B_CHANNEL = Buffer.from('channel');
-const B_MENTIONS = Buffer.from('mentions');
+const BIPF_CONTENT = bipf.allocAndEncode('content');
+const BIPF_CHANNEL = bipf.allocAndEncode('channel');
+const BIPF_MENTIONS = bipf.allocAndEncode('mentions');
 
 function sanitize(hashtag: string) {
   return hashtag.startsWith('#')
@@ -38,10 +38,10 @@ export = class HashtagPlugin extends DB2Plugin {
 
   processRecord(record: { value: Buffer; offset: number }, seq: number, pValue: number) {
     const buf = record.value;
-    const pValueContent = bipf.seekKey(buf, pValue, B_CONTENT);
+    const pValueContent = bipf.seekKey2(buf, pValue, BIPF_CONTENT, 0);
     if (pValueContent < 0) return;
-    const pValueContentChannel = bipf.seekKey(buf, pValueContent, B_CHANNEL);
-    const pValueContentMentions = bipf.seekKey(buf, pValueContent, B_MENTIONS);
+    const pValueContentChannel = bipf.seekKey2(buf, pValueContent, BIPF_CHANNEL, 0);
+    const pValueContentMentions = bipf.seekKey2(buf, pValueContent, BIPF_MENTIONS, 0);
 
     if (pValueContentChannel >= 0) {
       const channel = bipf.decode(buf, pValueContentChannel);
