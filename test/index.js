@@ -451,7 +451,10 @@ test('threads.public sorts threads by recency', (t) => {
     }),
     pull.asyncMap((rootMsg, cb) => {
       rootAkey = rootMsg.key;
-      ssb.db.publish({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, cb);
+      ssb.db.publish(
+        { type: 'post', text: 'A: 2nd', root: rootMsg.key },
+        wait(cb, 800),
+      );
     }),
     pull.asyncMap((_, cb) => {
       ssb.db.publish({ type: 'post', text: 'B: root' }, cb);
@@ -541,14 +544,14 @@ test('threads.publicSummary gives a simple well-formed summary', (t) => {
     pull.asyncMap((rootMsg, cb) => {
       ssb.db.publish(
         { type: 'post', text: 'Second message', root: rootMsg.key },
-        cb,
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((prevMsg, cb) => {
       const rootKey = prevMsg.value.content.root;
       ssb.db.publish(
         { type: 'post', text: 'Third message', root: rootKey },
-        cb,
+        wait(cb, 800),
       );
     }),
     pull.map(() => ssb.threads.publicSummary({})),
