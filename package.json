@@ -36,21 +36,20 @@
   "devDependencies": {
     "@types/node": "^14.14.37",
     "c8": "^7.11.0",
-    "faucet": "0.0.1",
     "pull-async": "1.0.0",
     "pull-notify": "^0.1.1",
     "secret-stack": "6.4.1",
     "ssb-db2": "^5.1.0",
     "ssb-caps": "^1.1.0",
     "ssb-keys": "8.4.1",
-    "ssb-validate": "^4.1.4",
-    "tape": "^5.2.2",
+    "tape": "^5.5.3",
+    "tap-arc": "~0.3.5",
     "ts-node": "^9.1.1",
     "typescript": "~4.7.4"
   },
   "scripts": {
     "compile": "tsc",
-    "tape": "tape test/index.js | faucet",
+    "tape": "tape test/index.js | tap-arc --bail",
     "test": "npm run compile && npm run tape",
     "coverage": "c8 --reporter=lcov npm run test"
   }

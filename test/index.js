@@ -6,7 +6,6 @@ const pull = require('pull-stream');
 const ssbKeys = require('ssb-keys');
 const SecretStack = require('secret-stack');
 const caps = require('ssb-caps');
-const validate = require('ssb-validate');
 const pullAsync = require('pull-async');
 const cat = require('pull-cat');
 
@@ -31,39 +30,35 @@ test('threads.public gives a simple well-formed thread', (t) => {
     keys: lucyKeys,
   });
 
-  let state = validate.initial();
-
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    { type: 'post', text: 'Thread root' },
-    Date.now(),
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    { type: 'post', text: 'Second message', root: state.queue[0].key },
-    Date.now() + 1,
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    { type: 'post', text: 'Third message', root: state.queue[0].key },
-    Date.now() + 2,
-  );
-
+  let msg1;
   pull(
     pullAsync((cb) => {
-      ssb.db.add(state.queue[0].value, cb);
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'Thread root' },
+        },
+        cb,
+      );
     }),
-    pull.asyncMap((_, cb) => {
-      ssb.db.add(state.queue[1].value, cb);
+    pull.asyncMap((msg, cb) => {
+      msg1 = msg;
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'Second message', root: msg1.key },
+        },
+        cb,
+      );
     }),
-    pull.asyncMap((_, cb) => {
-      ssb.db.add(state.queue[2].value, cb);
+    pull.asyncMap((msg, cb) => {
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'Third message', root: msg1.key },
+        },
+        cb,
+      );
     }),
     pull.map(() => ssb.threads.public({})),
     pull.flatten(),
@@ -169,8 +164,13 @@ test('threads.public does not show any private threads', (t) => {
 
   pull(
     pullAsync((cb) => {
-      ssb.db.publish(
-        ssbKeys.box({ type: 'post', text: 'Secret thread root' }, [ssb.id]),
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'Secret thread root' },
+          recps: [ssb.id],
+          encryptionFormat: 'box',
+        },
         cb,
       );
     }),
@@ -627,37 +627,6 @@ test('threads.publicUpdates notifies of new thread or new msg', (t) => {
     keys: lucyKeys,
   });
 
-  let state = validate.initial();
-
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    { type: 'post', text: 'A: root' },
-    Date.now(),
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    maryKeys,
-    { type: 'post', text: 'A: 2nd', root: state.queue[0].key },
-    Date.now() + 1,
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    maryKeys,
-    { type: 'post', text: 'B: root' },
-    Date.now() + 2,
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    { type: 'post', text: 'B: 2nd', root: state.queue[2].key },
-    Date.now() + 3,
-  );
-
   let updates = [];
 
   let liveDrainer;
@@ -668,23 +637,51 @@ test('threads.publicUpdates notifies of new thread or new msg', (t) => {
     })),
   );
 
+  let msg1, msg2, msg3;
   pull(
     pullAsync((cb) => {
-      ssb.db.add(state.queue[0].value, wait(cb, 800));
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'A: root' },
+        },
+        wait(cb, 800),
+      );
     }),
-    pull.asyncMap((_, cb) => {
+    pull.asyncMap((msg, cb) => {
+      msg1 = msg;
       t.equals(updates.length, 0);
-      ssb.db.add(state.queue[1].value, wait(cb, 800));
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'A: 2nd', root: msg1.key },
+        },
+        wait(cb, 800),
+      );
     }),
-    pull.asyncMap((_, cb) => {
+    pull.asyncMap((msg, cb) => {
+      msg2 = msg;
       t.equals(updates.length, 1);
-      t.equals(updates[0], state.queue[1].key);
-      ssb.db.add(state.queue[2].value, wait(cb, 800));
+      t.equals(updates[0], msg2.key);
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'B: root' },
+        },
+        wait(cb, 800),
+      );
     }),
-    pull.asyncMap((_, cb) => {
+    pull.asyncMap((msg, cb) => {
+      msg3 = msg;
       t.equals(updates.length, 2);
-      t.equals(updates[1], state.queue[2].key);
-      ssb.db.add(state.queue[3].value, wait(cb, 800));
+      t.equals(updates[1], msg3.key);
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'B: 2nd', root: msg3.key },
+        },
+        wait(cb, 800),
+      );
     }),
 
     pull.drain(() => {
@@ -703,37 +700,6 @@ test('threads.publicUpdates respects includeSelf opt', (t) => {
     keys: lucyKeys,
   });
 
-  let state = validate.initial();
-
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    { type: 'post', text: 'A: root' },
-    Date.now(),
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    maryKeys,
-    { type: 'post', text: 'A: 2nd', root: state.queue[0].key },
-    Date.now() + 1,
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    maryKeys,
-    { type: 'post', text: 'B: root' },
-    Date.now() + 2,
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    { type: 'post', text: 'B: 2nd', root: state.queue[2].key },
-    Date.now() + 3,
-  );
-
   let updates = 0;
 
   let liveDrainer;
@@ -744,21 +710,48 @@ test('threads.publicUpdates respects includeSelf opt', (t) => {
     })),
   );
 
+  let msg1, msg3;
   pull(
     pullAsync((cb) => {
-      ssb.db.add(state.queue[0].value, wait(cb, 800));
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'A: root' },
+        },
+        wait(cb, 800),
+      );
     }),
-    pull.asyncMap((_, cb) => {
+    pull.asyncMap((msg, cb) => {
+      msg1 = msg;
       t.equals(updates, 1);
-      ssb.db.add(state.queue[1].value, wait(cb, 800));
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'A: 2nd', root: msg1.key },
+        },
+        wait(cb, 800),
+      );
     }),
     pull.asyncMap((_, cb) => {
       t.equals(updates, 2);
-      ssb.db.add(state.queue[2].value, wait(cb, 800));
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'B: root' },
+        },
+        wait(cb, 800),
+      );
     }),
-    pull.asyncMap((_, cb) => {
+    pull.asyncMap((msg, cb) => {
+      msg3 = msg;
       t.equals(updates, 3);
-      ssb.db.add(state.queue[3].value, wait(cb, 800));
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'B: 2nd', root: msg3.key },
+        },
+        wait(cb, 800),
+      );
     }),
 
     pull.drain(() => {
@@ -777,34 +770,6 @@ test('threads.publicUpdates ignores replies to unknown roots', (t) => {
     keys: lucyKeys,
   });
 
-  let state = validate.initial();
-
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    { type: 'post', text: 'A: root' },
-    Date.now(),
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    maryKeys,
-    { type: 'post', text: 'A: 2nd', root: state.queue[0].key },
-    Date.now() + 1,
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    maryKeys,
-    {
-      type: 'post',
-      text: 'B: 2nd',
-      root: `%${Buffer.alloc(32, 'deadbeef').toString('base64')}.sha256`,
-    },
-    Date.now() + 2,
-  );
-
   let updates = [];
 
   let liveDrainer;
@@ -815,20 +780,45 @@ test('threads.publicUpdates ignores replies to unknown roots', (t) => {
     })),
   );
 
+  let msg1, msg2;
   pull(
     pullAsync((cb) => {
-      ssb.db.add(state.queue[0].value, wait(cb, 800));
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'A: root' },
+        },
+        wait(cb, 800),
+      );
     }),
-    pull.asyncMap((_, cb) => {
+    pull.asyncMap((msg, cb) => {
+      msg1 = msg;
       t.equals(updates.length, 0);
 
-      ssb.db.add(state.queue[1].value, wait(cb, 800));
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'A: 2nd', root: msg1.key },
+        },
+        wait(cb, 800),
+      );
     }),
-    pull.asyncMap((_, cb) => {
+    pull.asyncMap((msg, cb) => {
+      msg2 = msg;
       t.equals(updates.length, 1);
-      t.equals(updates[0], state.queue[1].key);
+      t.equals(updates[0], msg2.key);
 
-      ssb.db.add(state.queue[2].value, wait(cb, 800));
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: {
+            type: 'post',
+            text: 'B: 2nd',
+            root: `%${Buffer.alloc(32, 'deadbeef').toString('base64')}.sha256`,
+          },
+        },
+        wait(cb, 800),
+      );
     }),
 
     pull.drain(() => {
@@ -849,31 +839,31 @@ test('threads.hashtagSummary understands msg.value.content.channel', (t) => {
 
   pull(
     pullAsync((cb) => {
-      ssb.db.publish(
-        { type: 'post', text: 'Pizza', channel: 'food' },
-        (err, x) => {
-          setTimeout(() => {
-            cb(err, x);
-          }, 100);
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'Pizza', channel: 'food' },
         },
+        wait(cb, 100),
       );
     }),
     pull.asyncMap((rootMsg, cb) => {
-      ssb.db.publish(
-        { type: 'post', text: 'pepperoni', root: rootMsg.key },
-        (err, x) => {
-          setTimeout(() => {
-            cb(err, x);
-          }, 100);
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'pepperoni', root: rootMsg.key },
         },
+        wait(cb, 100),
       );
     }),
     pull.asyncMap((prevMsg, cb) => {
-      ssb.db.publish({ type: 'post', text: 'Third message' }, (err) => {
-        setTimeout(() => {
-          cb(err, null);
-        }, 100);
-      });
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'Third message' },
+        },
+        wait(cb, 100),
+      );
     }),
     pull.map(() => ssb.threads.hashtagSummary({ hashtag: 'food' })),
     pull.flatten(),
@@ -911,29 +901,17 @@ test('threads.hashtagSummary input is case-insensitive', (t) => {
     pullAsync((cb) => {
       ssb.db.publish(
         { type: 'post', text: 'Pizza', channel: 'Food' },
-        (err, x) => {
-          setTimeout(() => {
-            cb(err, x);
-          }, 100);
-        },
+        wait(cb, 100),
       );
     }),
     pull.asyncMap((rootMsg, cb) => {
       ssb.db.publish(
         { type: 'post', text: 'pepperoni', root: rootMsg.key },
-        (err, x) => {
-          setTimeout(() => {
-            cb(err, x);
-          }, 100);
-        },
+        wait(cb, 100),
       );
     }),
     pull.asyncMap((prevMsg, cb) => {
-      ssb.db.publish({ type: 'post', text: 'Third message' }, (err) => {
-        setTimeout(() => {
-          cb(err, null);
-        }, 100);
-      });
+      ssb.db.publish({ type: 'post', text: 'Third message' }, wait(cb, 100));
     }),
     pull.map(() => ssb.threads.hashtagSummary({ hashtag: 'food' })),
     pull.flatten(),
@@ -971,29 +949,17 @@ test('threads.hashtagSummary understands msg.value.content.mentions', (t) => {
     pullAsync((cb) => {
       ssb.db.publish(
         { type: 'post', text: 'Dog', mentions: [{ link: '#animals' }] },
-        (err, x) => {
-          setTimeout(() => {
-            cb(err, x);
-          }, 100);
-        },
+        wait(cb, 100),
       );
     }),
     pull.asyncMap((rootMsg, cb) => {
       ssb.db.publish(
         { type: 'post', text: 'poodle', root: rootMsg.key },
-        (err, x) => {
-          setTimeout(() => {
-            cb(err, x);
-          }, 100);
-        },
+        wait(cb, 100),
       );
     }),
     pull.asyncMap((prevMsg, cb) => {
-      ssb.db.publish({ type: 'post', text: 'Cat' }, (err) => {
-        setTimeout(() => {
-          cb(err, null);
-        }, 100);
-      });
+      ssb.db.publish({ type: 'post', text: 'Cat' }, wait(cb, 100));
     }),
     pull.map(() => ssb.threads.hashtagSummary({ hashtag: 'animals' })),
     pull.flatten(),
@@ -1027,39 +993,35 @@ test('threads.profile gives threads for lucy not mary', (t) => {
     keys: lucyKeys,
   });
 
-  let state = validate.initial();
-
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    { type: 'post', text: 'Root from lucy' },
-    Date.now(),
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    maryKeys,
-    { type: 'post', text: 'Root from mary' },
-    Date.now() + 1,
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    { type: 'post', text: 'Reply from lucy', root: state.queue[0].key },
-    Date.now() + 2,
-  );
-
+  let msg1;
   pull(
     pullAsync((cb) => {
-      ssb.db.add(state.queue[0].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'Root from lucy' },
+        },
+        wait(cb),
+      );
+    }),
+    pull.asyncMap((msg, cb) => {
+      msg1 = msg;
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'Root from mary' },
+        },
+        wait(cb),
+      );
     }),
     pull.asyncMap((_, cb) => {
-      ssb.db.add(state.queue[1].value, wait(cb));
-    }),
-    pull.asyncMap((_, cb) => {
-      ssb.db.add(state.queue[2].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'Reply from lucy', root: msg1.key },
+        },
+        wait(cb),
+      );
     }),
     pull.map(() => ssb.threads.profile({ id: lucyKeys.id })),
     pull.flatten(),
@@ -1092,39 +1054,32 @@ test('threads.profileSummary gives threads for lucy not mary', (t) => {
     keys: lucyKeys,
   });
 
-  let state = validate.initial();
-
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    { type: 'post', text: 'Root from lucy' },
-    Date.now(),
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    maryKeys,
-    { type: 'post', text: 'Root from mary' },
-    Date.now() + 1,
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    { type: 'post', text: 'Reply from lucy', root: state.queue[0].key },
-    Date.now() + 2,
-  );
-
+  let msg1;
   pull(
     pullAsync((cb) => {
-      ssb.db.add(state.queue[0].value, wait(cb));
+      ssb.db.create(
+        { keys: lucyKeys, content: { type: 'post', text: 'Root from lucy' } },
+        wait(cb),
+      );
+    }),
+    pull.asyncMap((msg, cb) => {
+      msg1 = msg;
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'Root from mary' },
+        },
+        wait(cb),
+      );
     }),
     pull.asyncMap((_, cb) => {
-      ssb.db.add(state.queue[1].value, wait(cb));
-    }),
-    pull.asyncMap((_, cb) => {
-      ssb.db.add(state.queue[2].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'Reply from lucy', root: msg1.key },
+        },
+        wait(cb),
+      );
     }),
     pull.map(() => ssb.threads.profileSummary({ id: lucyKeys.id })),
     pull.flatten(),
@@ -1199,27 +1154,44 @@ test('threads.private gives a simple well-formed thread', (t) => {
   let rootKey;
   pull(
     pullAsync((cb) => {
-      ssb.db.publish(
-        ssbKeys.box({ type: 'post', text: 'Secret thread root' }, [ssb.id]),
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'Secret thread root' },
+          recps: [ssb.id],
+          encryptionFormat: 'box',
+        },
         cb,
       );
     }),
     pull.asyncMap((rootMsg, cb) => {
       rootKey = rootMsg.key;
-      ssb.db.publish(
-        ssbKeys.box(
-          { type: 'post', text: 'Second secret message', root: rootKey },
-          [ssb.id],
-        ),
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: {
+            type: 'post',
+            text: 'Second secret message',
+            root: rootKey,
+          },
+          recps: [ssb.id],
+          encryptionFormat: 'box',
+        },
         cb,
       );
     }),
     pull.asyncMap((_prevMsg, cb) => {
-      ssb.db.publish(
-        ssbKeys.box(
-          { type: 'post', text: 'Third secret message', root: rootKey },
-          [ssb.id],
-        ),
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: {
+            type: 'post',
+            text: 'Third secret message',
+            root: rootKey,
+          },
+          recps: [ssb.id],
+          encryptionFormat: 'box',
+        },
         cb,
       );
     }),
@@ -1264,43 +1236,6 @@ test('threads.privateUpdates notifies of new thread or new msg', (t) => {
     keys: lucyKeys,
   });
 
-  let state = validate.initial();
-
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    ssbKeys.box({ type: 'post', text: 'A: root' }, [lucyKeys.id, maryKeys.id]),
-    Date.now(),
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    maryKeys,
-    ssbKeys.box({ type: 'post', text: 'A: 2nd', root: state.queue[0].key }, [
-      lucyKeys.id,
-      maryKeys.id,
-    ]),
-    Date.now() + 1,
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    maryKeys,
-    ssbKeys.box({ type: 'post', text: 'B: root' }, [lucyKeys.id, maryKeys.id]),
-    Date.now() + 2,
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    ssbKeys.box({ type: 'post', text: 'B: 2nd', root: state.queue[2].key }, [
-      lucyKeys.id,
-      maryKeys.id,
-    ]),
-    Date.now() + 3,
-  );
-
   let updates = 0;
   let liveDrainer;
   pull(
@@ -1310,21 +1245,55 @@ test('threads.privateUpdates notifies of new thread or new msg', (t) => {
     })),
   );
 
+  let msg1, msg3;
   pull(
     pullAsync((cb) => {
-      ssb.db.add(state.queue[0].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'A: root' },
+          recps: [lucyKeys.id, maryKeys.id],
+          encryptionFormat: 'box',
+        },
+        wait(cb),
+      );
     }),
-    pull.asyncMap((_, cb) => {
+    pull.asyncMap((msg, cb) => {
+      msg1 = msg;
       t.equals(updates, 0);
-      ssb.db.add(state.queue[1].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'A: 2nd', root: msg1.key },
+          recps: [lucyKeys.id, maryKeys.id],
+          encryptionFormat: 'box',
+        },
+        wait(cb),
+      );
     }),
     pull.asyncMap((_, cb) => {
       t.equals(updates, 1);
-      ssb.db.add(state.queue[2].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'B: root' },
+          recps: [lucyKeys.id, maryKeys.id],
+          encryptionFormat: 'box',
+        },
+        wait(cb),
+      );
     }),
-    pull.asyncMap((_, cb) => {
+    pull.asyncMap((msg, cb) => {
+      msg3 = msg;
       t.equals(updates, 2);
-      ssb.db.add(state.queue[3].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'B: 2nd', root: msg3.key },
+          recps: [lucyKeys.id, maryKeys.id],
+        },
+        wait(cb),
+      );
     }),
 
     pull.drain(() => {
@@ -1343,43 +1312,6 @@ test('threads.privateUpdates respects includeSelf', (t) => {
     keys: lucyKeys,
   });
 
-  let state = validate.initial();
-
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    ssbKeys.box({ type: 'post', text: 'A: root' }, [lucyKeys.id, maryKeys.id]),
-    Date.now(),
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    maryKeys,
-    ssbKeys.box({ type: 'post', text: 'A: 2nd', root: state.queue[0].key }, [
-      lucyKeys.id,
-      maryKeys.id,
-    ]),
-    Date.now() + 1,
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    maryKeys,
-    ssbKeys.box({ type: 'post', text: 'B: root' }, [lucyKeys.id, maryKeys.id]),
-    Date.now() + 2,
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    ssbKeys.box({ type: 'post', text: 'B: 2nd', root: state.queue[2].key }, [
-      lucyKeys.id,
-      maryKeys.id,
-    ]),
-    Date.now() + 3,
-  );
-
   let updates = 0;
   let liveDrainer;
   pull(
@@ -1389,21 +1321,56 @@ test('threads.privateUpdates respects includeSelf', (t) => {
     })),
   );
 
+  let msg1, msg3;
   pull(
     pullAsync((cb) => {
-      ssb.db.add(state.queue[0].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'A: root' },
+          recps: [lucyKeys.id, maryKeys.id],
+          encryptionFormat: 'box',
+        },
+        wait(cb),
+      );
     }),
-    pull.asyncMap((_, cb) => {
+    pull.asyncMap((msg, cb) => {
+      msg1 = msg;
       t.equals(updates, 1);
-      ssb.db.add(state.queue[1].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'A: 2nd', root: msg1.key },
+          recps: [lucyKeys.id, maryKeys.id],
+          encryptionFormat: 'box',
+        },
+        wait(cb),
+      );
     }),
     pull.asyncMap((_, cb) => {
       t.equals(updates, 2);
-      ssb.db.add(state.queue[2].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'B: root' },
+          recps: [lucyKeys.id, maryKeys.id],
+          encryptionFormat: 'box',
+        },
+        wait(cb),
+      );
     }),
-    pull.asyncMap((_, cb) => {
+    pull.asyncMap((msg, cb) => {
+      msg3 = msg;
       t.equals(updates, 3);
-      ssb.db.add(state.queue[3].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'B: 2nd', root: msg3.key },
+          recps: [lucyKeys.id, maryKeys.id],
+          encryptionFormat: 'box',
+        },
+        wait(cb),
+      );
     }),
 
     pull.drain(() => {
@@ -1518,27 +1485,44 @@ test('threads.thread (by default) cannot view private conversations', (t) => {
 
   pull(
     pullAsync((cb) => {
-      ssb.db.publish(
-        ssbKeys.box({ type: 'post', text: 'Secret thread root' }, [ssb.id]),
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'Secret thread root' },
+          recps: [ssb.id],
+          encryptionFormat: 'box',
+        },
         cb,
       );
     }),
     pull.asyncMap((rootMsg, cb) => {
       rootKey = rootMsg.key;
-      ssb.db.publish(
-        ssbKeys.box(
-          { type: 'post', text: 'Second secret message', root: rootKey },
-          [ssb.id],
-        ),
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: {
+            type: 'post',
+            text: 'Second secret message',
+            root: rootKey,
+          },
+          recps: [ssb.id],
+          encryptionFormat: 'box',
+        },
         cb,
       );
     }),
     pull.asyncMap((_prevMsg, cb) => {
-      ssb.db.publish(
-        ssbKeys.box(
-          { type: 'post', text: 'Third secret message', root: rootKey },
-          [ssb.id],
-        ),
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: {
+            type: 'post',
+            text: 'Third secret message',
+            root: rootKey,
+          },
+          recps: [ssb.id],
+          encryptionFormat: 'box',
+        },
         cb,
       );
     }),
@@ -1565,27 +1549,44 @@ test('threads.thread can view private conversations given opts.private', (t) => 
 
   pull(
     pullAsync((cb) => {
-      ssb.db.publish(
-        ssbKeys.box({ type: 'post', text: 'Secret thread root' }, [ssb.id]),
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'Secret thread root' },
+          recps: [ssb.id],
+          encryptionFormat: 'box',
+        },
         cb,
       );
     }),
     pull.asyncMap((rootMsg, cb) => {
       rootKey = rootMsg.key;
-      ssb.db.publish(
-        ssbKeys.box(
-          { type: 'post', text: 'Second secret message', root: rootKey },
-          [ssb.id],
-        ),
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: {
+            type: 'post',
+            text: 'Second secret message',
+            root: rootKey,
+          },
+          recps: [ssb.id],
+          encryptionFormat: 'box',
+        },
         cb,
       );
     }),
     pull.asyncMap((_prevMsg, cb) => {
-      ssb.db.publish(
-        ssbKeys.box(
-          { type: 'post', text: 'Third secret message', root: rootKey },
-          [ssb.id],
-        ),
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: {
+            type: 'post',
+            text: 'Third secret message',
+            root: rootKey,
+          },
+          recps: [ssb.id],
+          encryptionFormat: 'box',
+        },
         cb,
       );
     }),
@@ -1614,43 +1615,18 @@ test('threads.threadUpdates notifies of new reply to that thread', (t) => {
     keys: lucyKeys,
   });
 
-  let state = validate.initial();
-
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    { type: 'post', text: 'A: root' },
-    Date.now(),
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    maryKeys,
-    { type: 'post', text: 'A: 2nd', root: state.queue[0].key },
-    Date.now() + 1,
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    maryKeys,
-    { type: 'post', text: 'B: root' },
-    Date.now() + 2,
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    { type: 'post', text: 'B: 2nd', root: state.queue[2].key },
-    Date.now() + 3,
-  );
-
   let updates = 0;
   let liveDrainer;
 
   pull(
     pullAsync((cb) => {
-      ssb.db.add(state.queue[0].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'A: root' },
+        },
+        wait(cb),
+      );
     }),
     pull.asyncMap((rootMsg, cb) => {
       pull(
@@ -1663,16 +1639,34 @@ test('threads.threadUpdates notifies of new reply to that thread', (t) => {
 
       setTimeout(() => {
         t.equals(updates, 0);
-        ssb.db.add(state.queue[1].value, wait(cb));
+        ssb.db.create(
+          {
+            keys: maryKeys,
+            content: { type: 'post', text: 'A: 2nd', root: rootMsg.key },
+          },
+          wait(cb),
+        );
       }, 300);
     }),
     pull.asyncMap((_, cb) => {
       t.equals(updates, 1);
-      ssb.db.add(state.queue[2].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'B: root' },
+        },
+        wait(cb),
+      );
     }),
-    pull.asyncMap((_, cb) => {
+    pull.asyncMap((msg3, cb) => {
       t.equals(updates, 1);
-      ssb.db.add(state.queue[3].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'B: 2nd', root: msg3.key },
+        },
+        wait(cb),
+      );
     }),
 
     pull.drain(() => {
@@ -1691,49 +1685,20 @@ test('threads.threadUpdates (by default) cannot see private replies', (t) => {
     keys: lucyKeys,
   });
 
-  let state = validate.initial();
-
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    ssbKeys.box({ type: 'post', text: 'A: root' }, [lucyKeys.id, maryKeys.id]),
-    Date.now(),
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    maryKeys,
-    ssbKeys.box({ type: 'post', text: 'A: 2nd', root: state.queue[0].key }, [
-      lucyKeys.id,
-      maryKeys.id,
-    ]),
-    Date.now() + 1,
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    maryKeys,
-    ssbKeys.box({ type: 'post', text: 'B: root' }, [lucyKeys.id, maryKeys.id]),
-    Date.now() + 2,
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    ssbKeys.box({ type: 'post', text: 'B: 2nd', root: state.queue[2].key }, [
-      lucyKeys.id,
-      maryKeys.id,
-    ]),
-    Date.now() + 3,
-  );
-
   let updates = 0;
   let liveDrainer;
 
   pull(
     pullAsync((cb) => {
-      ssb.db.add(state.queue[0].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'A: root' },
+          recps: [lucyKeys.id, maryKeys.id],
+          encryptionFormat: 'box',
+        },
+        wait(cb),
+      );
     }),
     pull.asyncMap((rootMsg, cb) => {
       pull(
@@ -1746,16 +1711,40 @@ test('threads.threadUpdates (by default) cannot see private replies', (t) => {
 
       setTimeout(() => {
         t.equals(updates, 0);
-        ssb.db.add(state.queue[1].value, wait(cb));
+        ssb.db.create(
+          {
+            keys: maryKeys,
+            content: { type: 'post', text: 'A: 2nd', root: rootMsg.key },
+            recps: [lucyKeys.id, maryKeys.id],
+            encryptionFormat: 'box',
+          },
+          wait(cb),
+        );
       }, 300);
     }),
     pull.asyncMap((_, cb) => {
       t.equals(updates, 0);
-      ssb.db.add(state.queue[2].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'B: root' },
+          recps: [lucyKeys.id, maryKeys.id],
+          encryptionFormat: 'box',
+        },
+        wait(cb),
+      );
     }),
-    pull.asyncMap((_, cb) => {
+    pull.asyncMap((msg3, cb) => {
       t.equals(updates, 0);
-      ssb.db.add(state.queue[3].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'B: 2nd', root: msg3.key },
+          recps: [lucyKeys.id, maryKeys.id],
+          encryptionFormat: 'box',
+        },
+        wait(cb),
+      );
     }),
 
     pull.drain(() => {
@@ -1774,49 +1763,20 @@ test('threads.threadUpdates can view private replies given opts.private', (t) =>
     keys: lucyKeys,
   });
 
-  let state = validate.initial();
-
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    ssbKeys.box({ type: 'post', text: 'A: root' }, [lucyKeys.id, maryKeys.id]),
-    Date.now(),
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    maryKeys,
-    ssbKeys.box({ type: 'post', text: 'A: 2nd', root: state.queue[0].key }, [
-      lucyKeys.id,
-      maryKeys.id,
-    ]),
-    Date.now() + 1,
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    maryKeys,
-    ssbKeys.box({ type: 'post', text: 'B: root' }, [lucyKeys.id, maryKeys.id]),
-    Date.now() + 2,
-  );
-  state = validate.appendNew(
-    state,
-    null,
-    lucyKeys,
-    ssbKeys.box({ type: 'post', text: 'B: 2nd', root: state.queue[2].key }, [
-      lucyKeys.id,
-      maryKeys.id,
-    ]),
-    Date.now() + 3,
-  );
-
   let updates = 0;
   let liveDrainer;
 
   pull(
     pullAsync((cb) => {
-      ssb.db.add(state.queue[0].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'A: root' },
+          recps: [lucyKeys.id, maryKeys.id],
+          encryptionFormat: 'box',
+        },
+        wait(cb),
+      );
     }),
     pull.asyncMap((rootMsg, cb) => {
       pull(
@@ -1829,16 +1789,40 @@ test('threads.threadUpdates can view private replies given opts.private', (t) =>
 
       setTimeout(() => {
         t.equals(updates, 0);
-        ssb.db.add(state.queue[1].value, wait(cb));
+        ssb.db.create(
+          {
+            keys: maryKeys,
+            content: { type: 'post', text: 'A: 2nd', root: rootMsg.key },
+            recps: [lucyKeys.id, maryKeys.id],
+            encryptionFormat: 'box',
+          },
+          wait(cb),
+        );
       }, 300);
     }),
     pull.asyncMap((_, cb) => {
       t.equals(updates, 1);
-      ssb.db.add(state.queue[2].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'B: root' },
+          recps: [lucyKeys.id, maryKeys.id],
+          encryptionFormat: 'box',
+        },
+        wait(cb),
+      );
     }),
-    pull.asyncMap((_, cb) => {
+    pull.asyncMap((msg3, cb) => {
       t.equals(updates, 1);
-      ssb.db.add(state.queue[3].value, wait(cb));
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'B: 2nd', root: msg3.key },
+          recps: [lucyKeys.id, maryKeys.id],
+          encryptionFormat: 'box',
+        },
+        wait(cb),
+      );
     }),
 
     pull.drain(() => {
