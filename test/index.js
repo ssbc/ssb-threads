@@ -447,7 +447,7 @@ test('threads.public sorts threads by recency', (t) => {
   let rootAkey;
   pull(
     pullAsync((cb) => {
-      ssb.db.publish({ type: 'post', text: 'A: root' }, cb);
+      ssb.db.publish({ type: 'post', text: 'A: root' }, wait(cb));
     }),
     pull.asyncMap((rootMsg, cb) => {
       rootAkey = rootMsg.key;
@@ -457,10 +457,10 @@ test('threads.public sorts threads by recency', (t) => {
       );
     }),
     pull.asyncMap((_, cb) => {
-      ssb.db.publish({ type: 'post', text: 'B: root' }, cb);
+      ssb.db.publish({ type: 'post', text: 'B: root' }, wait(cb));
     }),
     pull.asyncMap((rootMsg, cb) => {
-      ssb.db.publish({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, cb);
+      ssb.db.publish({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, wait(cb));
     }),
     pull.asyncMap((_, cb) => {
       ssb.db.publish(
@@ -498,20 +498,20 @@ test('threads.public ignores threads where root msg is missing', (t) => {
   let rootAkey;
   pull(
     pullAsync((cb) => {
-      ssb.db.publish({ type: 'post', text: 'A: root' }, cb);
+      ssb.db.publish({ type: 'post', text: 'A: root' }, wait(cb));
     }),
     pull.asyncMap((rootMsg, cb) => {
       rootAkey = rootMsg.key;
-      ssb.db.publish({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, cb);
+      ssb.db.publish({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, wait(cb));
     }),
     pull.asyncMap((_, cb) => {
       ssb.db.publish(
         { type: 'post', text: 'B: 2nd', root: rootAkey.toLowerCase() },
-        cb,
+        wait(cb),
       );
     }),
     pull.asyncMap((_, cb) => {
-      ssb.db.publish({ type: 'post', text: 'A: 3rd', root: rootAkey }, cb);
+      ssb.db.publish({ type: 'post', text: 'A: 3rd', root: rootAkey }, wait(cb));
     }),
 
     pull.map(() => ssb.threads.public({ reverse: true })),
