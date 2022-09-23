@@ -119,16 +119,45 @@ function makePassesFilter(opts: FilterOpts): (msg: Msg) => boolean {
 class threads {
   private readonly ssb: Record<string, any>;
   private readonly isBlocking: (obj: any, cb: CB<boolean>) => void;
+  private readonly isFollowing: (obj: any, cb: CB<boolean>) => void | null;
 
   constructor(ssb: Record<string, any>, _config: any) {
     this.ssb = ssb;
     this.isBlocking = ssb.friends?.isBlocking
       ? ssb.friends.isBlocking
       : IS_BLOCKING_NEVER;
+    this.isFollowing = ssb.friends?.isFollowing;
     this.ssb.db.registerIndex(HashtagsPlugin);
   }
 
   //#region PRIVATE
+
+  private maybeOnlyKeepFollowingMessages =
+    (enabled: boolean) => (source: any) =>
+      pull(
+        source,
+        pull.asyncMap((root: Msg, cb: CB<Msg | null>) => {
+          if (!enabled) {
+            cb(null, root);
+            return;
+          }
+
+          if (!this.isFollowing) {
+            cb(null, root);
+            return;
+          }
+
+          this.isFollowing(
+            { source: this.ssb.id, dest: root.value.author },
+            (err: any, following: boolean) => {
+              if (err) cb(err);
+              else if (!following) cb(null, null);
+              else cb(null, root);
+            },
+          );
+        }),
+        pull.filter(notNull),
+      );
 
   private removeMessagesFromBlocked = (source: any) =>
     pull(
@@ -275,6 +304,7 @@ class threads {
   public public = (opts: Opts) => {
     const needsDescending = opts.reverse ?? true;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
+    const followingOnly = opts.following ?? false;
     const filterOperator = makeFilterOperator(opts);
     const passesFilter = makePassesFilter(opts);
 
@@ -292,6 +322,7 @@ class threads {
       pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
+      this.maybeOnlyKeepFollowingMessages(followingOnly),
       pull.asyncMap(this.nonBlockedRootToThread(threadMaxSize, filterOperator)),
     );
   };

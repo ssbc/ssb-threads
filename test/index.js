@@ -11,10 +11,12 @@ const cat = require('pull-cat');
 
 const CreateSSB = SecretStack({ appKey: caps.shs })
   .use(require('ssb-db2'))
+  .use(require('ssb-friends'))
   .use(require('../lib/index'));
 
 const lucyKeys = ssbKeys.generate();
 const maryKeys = ssbKeys.generate();
+const aliceKeys = ssbKeys.generate();
 
 function wait(cb, period = 300) {
   return (err, data) => {
@@ -460,7 +462,10 @@ test('threads.public sorts threads by recency', (t) => {
       ssb.db.publish({ type: 'post', text: 'B: root' }, wait(cb));
     }),
     pull.asyncMap((rootMsg, cb) => {
-      ssb.db.publish({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, wait(cb));
+      ssb.db.publish(
+        { type: 'post', text: 'B: 2nd', root: rootMsg.key },
+        wait(cb),
+      );
     }),
     pull.asyncMap((_, cb) => {
       ssb.db.publish(
@@ -502,7 +507,10 @@ test('threads.public ignores threads where root msg is missing', (t) => {
     }),
     pull.asyncMap((rootMsg, cb) => {
       rootAkey = rootMsg.key;
-      ssb.db.publish({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, wait(cb));
+      ssb.db.publish(
+        { type: 'post', text: 'A: 2nd', root: rootMsg.key },
+        wait(cb),
+      );
     }),
     pull.asyncMap((_, cb) => {
       ssb.db.publish(
@@ -511,7 +519,10 @@ test('threads.public ignores threads where root msg is missing', (t) => {
       );
     }),
     pull.asyncMap((_, cb) => {
-      ssb.db.publish({ type: 'post', text: 'A: 3rd', root: rootAkey }, wait(cb));
+      ssb.db.publish(
+        { type: 'post', text: 'A: 3rd', root: rootAkey },
+        wait(cb),
+      );
     }),
 
     pull.map(() => ssb.threads.public({ reverse: true })),
@@ -1828,6 +1839,85 @@ test('threads.threadUpdates can view private replies given opts.private', (t) =>
     pull.drain(() => {
       t.equals(updates, 1);
       liveDrainer.abort();
+      ssb.close(t.end);
+    }),
+  );
+});
+
+test('threads.public respects following opt', (t) => {
+  const ssb = CreateSSB({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
+    temp: true,
+    name: 'test1',
+    keys: lucyKeys,
+  });
+
+  pull(
+    pullAsync((cb) => {
+      ssb.db.publish(
+        { type: 'contact', contact: maryKeys.id, following: true },
+        cb,
+      );
+    }),
+    pull.asyncMap((_, cb) => {
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'Root post from Mary' },
+        },
+        cb,
+      );
+    }),
+    pull.asyncMap((maryRoot, cb) => {
+      ssb.db.create(
+        {
+          keys: aliceKeys,
+          content: {
+            type: 'post',
+            text: 'Alice reply to Mary root',
+            root: maryRoot.key,
+          },
+        },
+        cb,
+      );
+    }),
+    pull.asyncMap((_, cb) => {
+      ssb.db.create(
+        {
+          keys: aliceKeys,
+          content: { type: 'post', text: 'Root post from Alice' },
+        },
+        cb,
+      );
+    }),
+    pull.map(() => ssb.threads.public({ following: true })),
+    pull.flatten(),
+
+    pull.collect((err, threads) => {
+      t.error(err);
+      t.equals(threads.length, 1);
+
+      const thread = threads[0];
+
+      const threadRoot = thread.messages.find((m) => m.root === undefined);
+
+      t.equals(
+        threadRoot.value.author,
+        maryKeys.id,
+        'only threads created by following returned',
+      );
+
+      const threadReplies = thread.messages.filter(
+        (t) => t.key !== threadRoot.key,
+      );
+
+      t.equals(threadReplies.length, 1);
+      t.equals(
+        threadReplies[0].value.author,
+        aliceKeys.id,
+        'Replies to following root from non-following are preserved',
+      );
+
       ssb.close(t.end);
     }),
   );
