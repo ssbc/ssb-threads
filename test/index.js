@@ -1997,3 +1997,123 @@ test('threads.publicSummary respects following opt', (t) => {
     }),
   );
 });
+
+test('threads.publicUpdates respects following opt', (t) => {
+  const ssb = CreateSSB({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
+    temp: true,
+    name: 'test1',
+    keys: lucyKeys,
+  });
+
+  let updates = [];
+
+  let liveDrainer;
+  pull(
+    ssb.threads.publicUpdates({ following: true }),
+    (liveDrainer = pull.drain((msgKey) => {
+      updates.push(msgKey);
+    })),
+  );
+
+  let msg1, msg2, msg3, msg4, msg5;
+  pull(
+    pullAsync((cb) => {
+      ssb.db.publish(
+        { type: 'contact', contact: maryKeys.id, following: true },
+        cb,
+      );
+    }),
+    pull.asyncMap((_, cb) => {
+      ssb.db.create(
+        { content: { type: 'post', text: 'Root post from Lucy' } },
+        cb,
+        wait(cb, 800),
+      );
+    }),
+    pull.asyncMap((msg, cb) => {
+      msg1 = msg;
+      t.equals(updates.length, 0);
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: {
+            type: 'post',
+            text: 'Reply to Lucy root from Mary',
+            root: msg1.key,
+          },
+        },
+        wait(cb, 800),
+      );
+    }),
+    pull.asyncMap((msg, cb) => {
+      msg2 = msg;
+      t.equals(updates.length, 1);
+      t.equals(updates[0], msg2.key);
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'Root post from Mary' },
+        },
+        wait(cb, 800),
+      );
+    }),
+    pull.asyncMap((msg, cb) => {
+      msg3 = msg;
+      t.equals(updates.length, 2);
+      t.equals(updates[1], msg3.key);
+      ssb.db.create(
+        {
+          keys: aliceKeys,
+          content: {
+            type: 'post',
+            text: 'Reply to Mary root from Alice',
+            root: msg3.key,
+          },
+        },
+        wait(cb, 800),
+      );
+    }),
+
+    // Following db.create calls should NOT trigger an update
+    pull.asyncMap((msg, cb) => {
+      msg4 = msg;
+      t.equals(updates.length, 3);
+      t.equals(updates[2], msg4.key);
+
+      ssb.db.create(
+        {
+          keys: aliceKeys,
+          content: {
+            type: 'post',
+            text: 'Root post from Alice',
+          },
+        },
+        wait(cb, 800),
+      );
+    }),
+    pull.asyncMap((msg, cb) => {
+      msg5 = msg;
+      t.equals(updates.length, 3);
+      t.equals(updates[2], msg4.key);
+
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: {
+            type: 'post',
+            text: 'Reply to Alice from Mary',
+            root: msg5.key,
+          },
+        },
+        wait(cb, 800),
+      );
+    }),
+
+    pull.drain(() => {
+      t.equals(updates.length, 3, 'total updates');
+      liveDrainer.abort();
+      ssb.close(t.end);
+    }),
+  );
+});
