@@ -1266,7 +1266,7 @@ test('threads.privateUpdates notifies of new thread or new msg', (t) => {
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((msg, cb) => {
@@ -1279,7 +1279,7 @@ test('threads.privateUpdates notifies of new thread or new msg', (t) => {
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((_, cb) => {
@@ -1291,7 +1291,7 @@ test('threads.privateUpdates notifies of new thread or new msg', (t) => {
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((msg, cb) => {
@@ -1342,7 +1342,7 @@ test('threads.privateUpdates respects includeSelf', (t) => {
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((msg, cb) => {
@@ -1355,7 +1355,7 @@ test('threads.privateUpdates respects includeSelf', (t) => {
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((_, cb) => {
@@ -1367,7 +1367,7 @@ test('threads.privateUpdates respects includeSelf', (t) => {
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((msg, cb) => {
@@ -1380,7 +1380,7 @@ test('threads.privateUpdates respects includeSelf', (t) => {
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
 
@@ -1636,7 +1636,7 @@ test('threads.threadUpdates notifies of new reply to that thread', (t) => {
           keys: lucyKeys,
           content: { type: 'post', text: 'A: root' },
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((rootMsg, cb) => {
@@ -1655,7 +1655,7 @@ test('threads.threadUpdates notifies of new reply to that thread', (t) => {
             keys: maryKeys,
             content: { type: 'post', text: 'A: 2nd', root: rootMsg.key },
           },
-          wait(cb),
+          wait(cb, 800),
         );
       }, 300);
     }),
@@ -1666,7 +1666,7 @@ test('threads.threadUpdates notifies of new reply to that thread', (t) => {
           keys: maryKeys,
           content: { type: 'post', text: 'B: root' },
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((msg3, cb) => {
@@ -1676,7 +1676,7 @@ test('threads.threadUpdates notifies of new reply to that thread', (t) => {
           keys: lucyKeys,
           content: { type: 'post', text: 'B: 2nd', root: msg3.key },
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
 
@@ -1786,7 +1786,7 @@ test('threads.threadUpdates can view private replies given opts.private', (t) =>
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((rootMsg, cb) => {
@@ -1807,7 +1807,7 @@ test('threads.threadUpdates can view private replies given opts.private', (t) =>
             recps: [lucyKeys.id, maryKeys.id],
             encryptionFormat: 'box',
           },
-          wait(cb),
+          wait(cb, 800),
         );
       }, 300);
     }),
@@ -1820,7 +1820,7 @@ test('threads.threadUpdates can view private replies given opts.private', (t) =>
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((msg3, cb) => {
@@ -1832,7 +1832,7 @@ test('threads.threadUpdates can view private replies given opts.private', (t) =>
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
 
