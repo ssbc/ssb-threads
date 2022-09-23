@@ -330,6 +330,7 @@ class threads {
   @muxrpc('source')
   public publicSummary = (opts: Omit<Opts, 'threadMaxSize'>) => {
     const needsDescending = opts.reverse ?? true;
+    const followingOnly = opts.following ?? false;
     const filterOperator = makeFilterOperator(opts);
     const passesFilter = makePassesFilter(opts);
     const timestamps = new Map<MsgId, number>();
@@ -351,6 +352,7 @@ class threads {
       pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
+      this.maybeOnlyKeepFollowingMessages(followingOnly),
       pull.asyncMap(this.nonBlockedRootToSummary(filterOperator, timestamps)),
     );
   };

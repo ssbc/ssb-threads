@@ -1922,3 +1922,78 @@ test('threads.public respects following opt', (t) => {
     }),
   );
 });
+
+test('threads.publicSummary respects following opt', (t) => {
+  const ssb = CreateSSB({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
+    temp: true,
+    name: 'test1',
+    keys: lucyKeys,
+  });
+
+  pull(
+    pullAsync((cb) => {
+      ssb.db.publish(
+        { type: 'contact', contact: maryKeys.id, following: true },
+        cb,
+      );
+    }),
+    pull.asyncMap((_, cb) => {
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'Root post from Mary' },
+        },
+        cb,
+      );
+    }),
+    pull.asyncMap((maryRoot, cb) => {
+      ssb.db.create(
+        {
+          keys: aliceKeys,
+          content: {
+            type: 'post',
+            text: 'Alice reply to Mary root',
+            root: maryRoot.key,
+          },
+        },
+        cb,
+      );
+    }),
+    pull.asyncMap((_, cb) => {
+      ssb.db.create(
+        {
+          keys: aliceKeys,
+          content: { type: 'post', text: 'Root post from Alice' },
+        },
+        cb,
+      );
+    }),
+    pull.map(() => ssb.threads.publicSummary({ following: true })),
+    pull.flatten(),
+
+    pull.collect((err, summaries) => {
+      t.error(err);
+      t.equals(summaries.length, 1);
+
+      const onlyFollowingSummaries = summaries.every(
+        (s) => s.root.value.author !== aliceKeys.id,
+      );
+
+      t.ok(
+        onlyFollowingSummaries,
+        'only summaries for threads created by following returned',
+      );
+
+      const summary = summaries[0];
+
+      t.equals(
+        summary.replyCount,
+        1,
+        'Replies to threads from non-following still accounted for',
+      );
+
+      ssb.close(t.end);
+    }),
+  );
+});
