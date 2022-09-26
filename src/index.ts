@@ -132,53 +132,47 @@ class threads {
 
   //#region PRIVATE
 
-  private maybeOnlyKeepFollowingMessages =
-    (enabled: boolean) => (source: any) =>
-      pull(
-        source,
-        pull.asyncMap((msg: Msg, cb: CB<Msg | null>) => {
-          if (!enabled) {
+  private onlyKeepFollowingMessages = (source: any) =>
+    pull(
+      source,
+      pull.asyncMap((msg: Msg, cb: CB<Msg | null>) => {
+        if (!this.isFollowing) {
+          cb(null, msg);
+          return;
+        }
+
+        function isFollowingCb(err: any, following: boolean) {
+          if (err) cb(err);
+          else if (!following) cb(null, null);
+          else cb(null, msg);
+        }
+
+        const rootMsgKey = getRootMsgId(msg);
+
+        if (rootMsgKey === msg.key) {
+          this.isFollowing(
+            { source: this.ssb.id, dest: msg.value.author },
+            isFollowingCb,
+          );
+          return;
+        }
+
+        this.ssb.db.getMsg(rootMsgKey, (err: any, rootMsg: Msg) => {
+          if (err) cb(null, null);
+          else if (rootMsg.value.author === this.ssb.id) {
             cb(null, msg);
-            return;
-          }
-
-          if (!this.isFollowing) {
-            cb(null, msg);
-            return;
-          }
-
-          function isFollowingCb(err: any, following: boolean) {
-            if (err) cb(err);
-            else if (!following) cb(null, null);
-            else cb(null, msg);
-          }
-
-          const rootMsgKey = getRootMsgId(msg);
-
-          if (rootMsgKey === msg.key) {
+          } else if (this.isFollowing) {
             this.isFollowing(
-              { source: this.ssb.id, dest: msg.value.author },
+              { source: this.ssb.id, dest: rootMsg.value.author },
               isFollowingCb,
             );
-            return;
+          } else {
+            cb(null, msg);
           }
-
-          this.ssb.db.getMsg(rootMsgKey, (err: any, rootMsg: Msg) => {
-            if (err) cb(null, null);
-            else if (rootMsg.value.author === this.ssb.id) {
-              cb(null, msg);
-            } else if (enabled && this.isFollowing) {
-              this.isFollowing(
-                { source: this.ssb.id, dest: rootMsg.value.author },
-                isFollowingCb,
-              );
-            } else {
-              cb(null, msg);
-            }
-          });
-        }),
-        pull.filter(notNull),
-      );
+        });
+      }),
+      pull.filter(notNull),
+    );
 
   private removeMessagesFromBlocked = (source: any) =>
     pull(
@@ -343,7 +337,7 @@ class threads {
       pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
-      this.maybeOnlyKeepFollowingMessages(followingOnly),
+      followingOnly ? this.onlyKeepFollowingMessages : pull.through(),
       pull.asyncMap(this.nonBlockedRootToThread(threadMaxSize, filterOperator)),
     );
   };
@@ -373,7 +367,7 @@ class threads {
       pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
-      this.maybeOnlyKeepFollowingMessages(followingOnly),
+      followingOnly ? this.onlyKeepFollowingMessages : pull.through(),
       pull.asyncMap(this.nonBlockedRootToSummary(filterOperator, timestamps)),
     );
   };
@@ -399,7 +393,7 @@ class threads {
       ),
       this.removeMessagesFromBlocked,
       this.removeMessagesWhereRootIsMissingOrBlocked(passesFilter),
-      this.maybeOnlyKeepFollowingMessages(onlyFollowing),
+      onlyFollowing ? this.onlyKeepFollowingMessages : pull.through(),
       pull.map((msg: Msg) => msg.key),
     );
   };
