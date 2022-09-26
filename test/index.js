@@ -509,19 +509,19 @@ test('threads.public ignores threads where root msg is missing', (t) => {
       rootAkey = rootMsg.key;
       ssb.db.publish(
         { type: 'post', text: 'A: 2nd', root: rootMsg.key },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((_, cb) => {
       ssb.db.publish(
         { type: 'post', text: 'B: 2nd', root: rootAkey.toLowerCase() },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((_, cb) => {
       ssb.db.publish(
         { type: 'post', text: 'A: 3rd', root: rootAkey },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
 
@@ -1856,7 +1856,7 @@ test('threads.public respects following opt', (t) => {
     pullAsync((cb) => {
       ssb.db.publish(
         { type: 'contact', contact: maryKeys.id, following: true },
-        cb,
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((_, cb) => {
@@ -1865,7 +1865,7 @@ test('threads.public respects following opt', (t) => {
           keys: maryKeys,
           content: { type: 'post', text: 'Root post from Mary' },
         },
-        cb,
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((maryRoot, cb) => {
@@ -1878,7 +1878,7 @@ test('threads.public respects following opt', (t) => {
             root: maryRoot.key,
           },
         },
-        cb,
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((_, cb) => {
@@ -1895,25 +1895,35 @@ test('threads.public respects following opt', (t) => {
 
     pull.collect((err, threads) => {
       t.error(err);
-      t.equals(threads.length, 1);
+      t.equals(threads.length, 2);
 
-      const thread = threads[0];
+      const onlyFollowingThreads = threads.every((t) => {
+        const threadRootMsg = t.messages.find(
+          (m) => m.value.content.root === undefined,
+        );
+        return threadRootMsg.key !== aliceKeys.id;
+      });
 
-      const threadRoot = thread.messages.find((m) => m.root === undefined);
+      t.ok(onlyFollowingThreads, 'only threads created by following returned');
 
-      t.equals(
-        threadRoot.value.author,
-        maryKeys.id,
-        'only threads created by following returned',
+      const maryThread = threads.find(
+        (t) =>
+          !!t.messages.find(
+            (m) =>
+              m.value.content.root === undefined &&
+              m.value.author === maryKeys.id,
+          ),
+      );
+      const maryThreadRoot = maryThread.messages.find(
+        (m) => m.value.content.root === undefined,
+      );
+      const maryThreadReplies = maryThread.messages.filter(
+        (m) => !!m.value.content.root,
       );
 
-      const threadReplies = thread.messages.filter(
-        (t) => t.key !== threadRoot.key,
-      );
-
-      t.equals(threadReplies.length, 1);
+      t.equals(maryThreadReplies.length, 1);
       t.equals(
-        threadReplies[0].value.author,
+        maryThreadReplies[0].value.author,
         aliceKeys.id,
         'Replies to following root from non-following are preserved',
       );
@@ -1974,7 +1984,7 @@ test('threads.publicSummary respects following opt', (t) => {
 
     pull.collect((err, summaries) => {
       t.error(err);
-      t.equals(summaries.length, 1);
+      t.equals(summaries.length, 2);
 
       const onlyFollowingSummaries = summaries.every(
         (s) => s.root.value.author !== aliceKeys.id,
@@ -1985,10 +1995,17 @@ test('threads.publicSummary respects following opt', (t) => {
         'only summaries for threads created by following returned',
       );
 
-      const summary = summaries[0];
+      const contactSummary = summaries.find(
+        (s) => s.root.value.content.type === 'contact',
+      );
+      const marySummary = summaries.find(
+        (s) => s.root.value.author === maryKeys.id,
+      );
+
+      t.equals(contactSummary.replyCount, 0);
 
       t.equals(
-        summary.replyCount,
+        marySummary.replyCount,
         1,
         'Replies to threads from non-following still accounted for',
       );
