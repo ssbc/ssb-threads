@@ -63,7 +63,7 @@ Returns a pull stream that emits thread objects of public messages.
 * `opts.threadMaxSize`: optional number (default: Infinity). Dictates the maximum amount of messages in each returned thread object. Serves for previewing threads, particularly long ones.
 * `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
-- `opts.following`: optional boolean (default: false). `true` means only threads created by those directly followed will be emitted. Requires `ssb-friends`.
+- `opts.following`: optional boolean (default: false). `true` means only threads created by those directly followed (and yourself) will be emitted. Requires `ssb-friends`.
 
 ### `ssb.threads.publicSummary(opts)`
 
@@ -72,7 +72,7 @@ Returns a pull stream that emits summary objects of public threads.
 * `opts.reverse`: boolean, default `true`. `false` means threads will be delivered from oldest to most recent, `true` means they will be delivered from most recent to oldest.
 * `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
-- `opts.following`: optional boolean (default: false). `true` means only summaries for threads created by those directly followed will be emitted. Requires `ssb-friends`.
+- `opts.following`: optional boolean (default: false). `true` means only summaries for threads created by those directly followed (and yourself) will be emitted. Requires `ssb-friends`.
 
 ### `ssb.threads.publicUpdates(opts)`
 
