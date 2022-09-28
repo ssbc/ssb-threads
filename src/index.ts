@@ -115,20 +115,84 @@ function makePassesFilter(opts: FilterOpts): (msg: Msg) => boolean {
   return () => true;
 }
 
+function assertFollowingOnlyUsability<
+  T extends ((obj: any, cb: CB<boolean>) => void) | null,
+>(enabled: boolean, isFollowing: T): asserts isFollowing is NonNullable<T> {
+  if (enabled && !isFollowing) {
+    throw new Error('ssb-threads requires ssb-friends installed');
+  }
+}
+
 @plugin('2.0.0')
 class threads {
   private readonly ssb: Record<string, any>;
   private readonly isBlocking: (obj: any, cb: CB<boolean>) => void;
+  private readonly isFollowing: ((obj: any, cb: CB<boolean>) => void) | null;
 
   constructor(ssb: Record<string, any>, _config: any) {
     this.ssb = ssb;
     this.isBlocking = ssb.friends?.isBlocking
       ? ssb.friends.isBlocking
       : IS_BLOCKING_NEVER;
+    this.isFollowing = ssb.friends?.isFollowing;
     this.ssb.db.registerIndex(HashtagsPlugin);
   }
 
   //#region PRIVATE
+
+  // Make sure you're using this on a source that only returns root messages
+  private onlyKeepFollowingRootMessages =
+    (isFollowing: NonNullable<typeof this.isFollowing>) => (source: any) =>
+      pull(
+        source,
+        pull.asyncMap((rootMsg: Msg, cb: CB<Msg | null>) => {
+          if (rootMsg.value.author === this.ssb.id) {
+            return cb(null, rootMsg);
+          }
+
+          isFollowing(
+            { source: this.ssb.id, dest: rootMsg.value.author },
+            (err: any, following: boolean) => {
+              if (err) cb(err);
+              else if (!following) cb(null, null);
+              else cb(null, rootMsg);
+            },
+          );
+        }),
+        pull.filter(notNull),
+      );
+
+  private onlyKeepMessageIfFollowingRoot =
+    (isFollowing: NonNullable<typeof this.isFollowing>, includeSelf: boolean) =>
+    (source: any) =>
+      pull(
+        source,
+        pull.asyncMap((msg: Msg, cb: CB<Msg | null>) => {
+          const rootMsgKey = getRootMsgId(msg);
+
+          if (includeSelf && msg.value.author === this.ssb.id) {
+            return cb(null, msg);
+          }
+
+          this.ssb.db.getMsg(rootMsgKey, (err: any, rootMsg: Msg) => {
+            if (err) cb(null, null);
+
+            if (rootMsg.value.author === this.ssb.id) {
+              return cb(null, msg);
+            }
+
+            isFollowing(
+              { source: this.ssb.id, dest: rootMsg.value.author },
+              (err: any, following: boolean) => {
+                if (err) cb(err);
+                else if (!following) cb(null, null);
+                else cb(null, msg);
+              },
+            );
+          });
+        }),
+        pull.filter(notNull),
+      );
 
   private removeMessagesFromBlocked = (source: any) =>
     pull(
@@ -275,8 +339,15 @@ class threads {
   public public = (opts: Opts) => {
     const needsDescending = opts.reverse ?? true;
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
+    const followingOnly = opts.following ?? false;
     const filterOperator = makeFilterOperator(opts);
     const passesFilter = makePassesFilter(opts);
+
+    try {
+      assertFollowingOnlyUsability(followingOnly, this.isFollowing);
+    } catch (err) {
+      return pull.error(err);
+    }
 
     return pull(
       this.ssb.db.query(
@@ -292,6 +363,9 @@ class threads {
       pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
+      followingOnly
+        ? this.onlyKeepFollowingRootMessages(this.isFollowing)
+        : pull.through(),
       pull.asyncMap(this.nonBlockedRootToThread(threadMaxSize, filterOperator)),
     );
   };
@@ -299,9 +373,16 @@ class threads {
   @muxrpc('source')
   public publicSummary = (opts: Omit<Opts, 'threadMaxSize'>) => {
     const needsDescending = opts.reverse ?? true;
+    const followingOnly = opts.following ?? false;
     const filterOperator = makeFilterOperator(opts);
     const passesFilter = makePassesFilter(opts);
     const timestamps = new Map<MsgId, number>();
+
+    try {
+      assertFollowingOnlyUsability(followingOnly, this.isFollowing);
+    } catch (err) {
+      return pull.error(err);
+    }
 
     return pull(
       this.ssb.db.query(
@@ -320,6 +401,9 @@ class threads {
       pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
+      followingOnly
+        ? this.onlyKeepFollowingRootMessages(this.isFollowing)
+        : pull.through(),
       pull.asyncMap(this.nonBlockedRootToSummary(filterOperator, timestamps)),
     );
   };
@@ -329,6 +413,13 @@ class threads {
     const filterOperator = makeFilterOperator(opts);
     const passesFilter = makePassesFilter(opts);
     const includeSelf = opts.includeSelf ?? false;
+    const followingOnly = opts.following ?? false;
+
+    try {
+      assertFollowingOnlyUsability(followingOnly, this.isFollowing);
+    } catch (err) {
+      return pull.error(err);
+    }
 
     return pull(
       this.ssb.db.query(
@@ -344,6 +435,9 @@ class threads {
       ),
       this.removeMessagesFromBlocked,
       this.removeMessagesWhereRootIsMissingOrBlocked(passesFilter),
+      followingOnly
+        ? this.onlyKeepMessageIfFollowingRoot(this.isFollowing, includeSelf)
+        : pull.through(),
       pull.map((msg: Msg) => msg.key),
     );
   };

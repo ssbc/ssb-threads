@@ -18,6 +18,7 @@ export type ThreadSummary = {
 export type FilterOpts = {
   allowlist?: Array<string>;
   blocklist?: Array<string>;
+  following?: boolean;
 };
 
 export type Opts = {

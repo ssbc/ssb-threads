@@ -11,10 +11,12 @@ const cat = require('pull-cat');
 
 const CreateSSB = SecretStack({ appKey: caps.shs })
   .use(require('ssb-db2'))
+  .use(require('ssb-friends'))
   .use(require('../lib/index'));
 
 const lucyKeys = ssbKeys.generate();
 const maryKeys = ssbKeys.generate();
+const aliceKeys = ssbKeys.generate();
 
 function wait(cb, period = 300) {
   return (err, data) => {
@@ -460,7 +462,10 @@ test('threads.public sorts threads by recency', (t) => {
       ssb.db.publish({ type: 'post', text: 'B: root' }, wait(cb));
     }),
     pull.asyncMap((rootMsg, cb) => {
-      ssb.db.publish({ type: 'post', text: 'B: 2nd', root: rootMsg.key }, wait(cb));
+      ssb.db.publish(
+        { type: 'post', text: 'B: 2nd', root: rootMsg.key },
+        wait(cb),
+      );
     }),
     pull.asyncMap((_, cb) => {
       ssb.db.publish(
@@ -502,16 +507,22 @@ test('threads.public ignores threads where root msg is missing', (t) => {
     }),
     pull.asyncMap((rootMsg, cb) => {
       rootAkey = rootMsg.key;
-      ssb.db.publish({ type: 'post', text: 'A: 2nd', root: rootMsg.key }, wait(cb));
+      ssb.db.publish(
+        { type: 'post', text: 'A: 2nd', root: rootMsg.key },
+        wait(cb, 800),
+      );
     }),
     pull.asyncMap((_, cb) => {
       ssb.db.publish(
         { type: 'post', text: 'B: 2nd', root: rootAkey.toLowerCase() },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((_, cb) => {
-      ssb.db.publish({ type: 'post', text: 'A: 3rd', root: rootAkey }, wait(cb));
+      ssb.db.publish(
+        { type: 'post', text: 'A: 3rd', root: rootAkey },
+        wait(cb, 800),
+      );
     }),
 
     pull.map(() => ssb.threads.public({ reverse: true })),
@@ -1255,7 +1266,7 @@ test('threads.privateUpdates notifies of new thread or new msg', (t) => {
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((msg, cb) => {
@@ -1268,7 +1279,7 @@ test('threads.privateUpdates notifies of new thread or new msg', (t) => {
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((_, cb) => {
@@ -1280,7 +1291,7 @@ test('threads.privateUpdates notifies of new thread or new msg', (t) => {
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((msg, cb) => {
@@ -1331,7 +1342,7 @@ test('threads.privateUpdates respects includeSelf', (t) => {
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((msg, cb) => {
@@ -1344,7 +1355,7 @@ test('threads.privateUpdates respects includeSelf', (t) => {
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((_, cb) => {
@@ -1356,7 +1367,7 @@ test('threads.privateUpdates respects includeSelf', (t) => {
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((msg, cb) => {
@@ -1369,7 +1380,7 @@ test('threads.privateUpdates respects includeSelf', (t) => {
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
 
@@ -1625,7 +1636,7 @@ test('threads.threadUpdates notifies of new reply to that thread', (t) => {
           keys: lucyKeys,
           content: { type: 'post', text: 'A: root' },
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((rootMsg, cb) => {
@@ -1644,7 +1655,7 @@ test('threads.threadUpdates notifies of new reply to that thread', (t) => {
             keys: maryKeys,
             content: { type: 'post', text: 'A: 2nd', root: rootMsg.key },
           },
-          wait(cb),
+          wait(cb, 800),
         );
       }, 300);
     }),
@@ -1655,7 +1666,7 @@ test('threads.threadUpdates notifies of new reply to that thread', (t) => {
           keys: maryKeys,
           content: { type: 'post', text: 'B: root' },
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((msg3, cb) => {
@@ -1665,7 +1676,7 @@ test('threads.threadUpdates notifies of new reply to that thread', (t) => {
           keys: lucyKeys,
           content: { type: 'post', text: 'B: 2nd', root: msg3.key },
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
 
@@ -1775,7 +1786,7 @@ test('threads.threadUpdates can view private replies given opts.private', (t) =>
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((rootMsg, cb) => {
@@ -1796,7 +1807,7 @@ test('threads.threadUpdates can view private replies given opts.private', (t) =>
             recps: [lucyKeys.id, maryKeys.id],
             encryptionFormat: 'box',
           },
-          wait(cb),
+          wait(cb, 800),
         );
       }, 300);
     }),
@@ -1809,7 +1820,7 @@ test('threads.threadUpdates can view private replies given opts.private', (t) =>
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
     pull.asyncMap((msg3, cb) => {
@@ -1821,12 +1832,303 @@ test('threads.threadUpdates can view private replies given opts.private', (t) =>
           recps: [lucyKeys.id, maryKeys.id],
           encryptionFormat: 'box',
         },
-        wait(cb),
+        wait(cb, 800),
       );
     }),
 
     pull.drain(() => {
       t.equals(updates, 1);
+      liveDrainer.abort();
+      ssb.close(t.end);
+    }),
+  );
+});
+
+test('threads.public respects following opt', (t) => {
+  const ssb = CreateSSB({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
+    temp: true,
+    name: 'test1',
+    keys: lucyKeys,
+  });
+
+  pull(
+    pullAsync((cb) => {
+      ssb.db.publish(
+        { type: 'contact', contact: maryKeys.id, following: true },
+        wait(cb, 800),
+      );
+    }),
+    pull.asyncMap((_, cb) => {
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'Root post from Mary' },
+        },
+        wait(cb, 800),
+      );
+    }),
+    pull.asyncMap((maryRoot, cb) => {
+      ssb.db.create(
+        {
+          keys: aliceKeys,
+          content: {
+            type: 'post',
+            text: 'Alice reply to Mary root',
+            root: maryRoot.key,
+          },
+        },
+        wait(cb, 800),
+      );
+    }),
+    pull.asyncMap((_, cb) => {
+      ssb.db.create(
+        {
+          keys: aliceKeys,
+          content: { type: 'post', text: 'Root post from Alice' },
+        },
+        cb,
+      );
+    }),
+    pull.map(() => ssb.threads.public({ following: true })),
+    pull.flatten(),
+
+    pull.collect((err, threads) => {
+      t.error(err);
+      t.equals(threads.length, 2);
+
+      const onlyFollowingThreads = threads.every((t) => {
+        const threadRootMsg = t.messages.find(
+          (m) => m.value.content.root === undefined,
+        );
+        return threadRootMsg.key !== aliceKeys.id;
+      });
+
+      t.ok(onlyFollowingThreads, 'only threads created by following returned');
+
+      const maryThread = threads.find(
+        (t) =>
+          !!t.messages.find(
+            (m) =>
+              m.value.content.root === undefined &&
+              m.value.author === maryKeys.id,
+          ),
+      );
+      const maryThreadRoot = maryThread.messages.find(
+        (m) => m.value.content.root === undefined,
+      );
+      const maryThreadReplies = maryThread.messages.filter(
+        (m) => !!m.value.content.root,
+      );
+
+      t.equals(maryThreadReplies.length, 1);
+      t.equals(
+        maryThreadReplies[0].value.author,
+        aliceKeys.id,
+        'Replies to following root from non-following are preserved',
+      );
+
+      ssb.close(t.end);
+    }),
+  );
+});
+
+test('threads.publicSummary respects following opt', (t) => {
+  const ssb = CreateSSB({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
+    temp: true,
+    name: 'test1',
+    keys: lucyKeys,
+  });
+
+  pull(
+    pullAsync((cb) => {
+      ssb.db.publish(
+        { type: 'contact', contact: maryKeys.id, following: true },
+        cb,
+      );
+    }),
+    pull.asyncMap((_, cb) => {
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'Root post from Mary' },
+        },
+        cb,
+      );
+    }),
+    pull.asyncMap((maryRoot, cb) => {
+      ssb.db.create(
+        {
+          keys: aliceKeys,
+          content: {
+            type: 'post',
+            text: 'Alice reply to Mary root',
+            root: maryRoot.key,
+          },
+        },
+        cb,
+      );
+    }),
+    pull.asyncMap((_, cb) => {
+      ssb.db.create(
+        {
+          keys: aliceKeys,
+          content: { type: 'post', text: 'Root post from Alice' },
+        },
+        cb,
+      );
+    }),
+    pull.map(() => ssb.threads.publicSummary({ following: true })),
+    pull.flatten(),
+
+    pull.collect((err, summaries) => {
+      t.error(err);
+      t.equals(summaries.length, 2);
+
+      const onlyFollowingSummaries = summaries.every(
+        (s) => s.root.value.author !== aliceKeys.id,
+      );
+
+      t.ok(
+        onlyFollowingSummaries,
+        'only summaries for threads created by following returned',
+      );
+
+      const contactSummary = summaries.find(
+        (s) => s.root.value.content.type === 'contact',
+      );
+      const marySummary = summaries.find(
+        (s) => s.root.value.author === maryKeys.id,
+      );
+
+      t.equals(contactSummary.replyCount, 0);
+
+      t.equals(
+        marySummary.replyCount,
+        1,
+        'Replies to threads from non-following still accounted for',
+      );
+
+      ssb.close(t.end);
+    }),
+  );
+});
+
+test('threads.publicUpdates respects following opt', (t) => {
+  const ssb = CreateSSB({
+    path: fs.mkdtempSync(path.join(os.tmpdir(), 'threads-test')),
+    temp: true,
+    name: 'test1',
+    keys: lucyKeys,
+  });
+
+  let updates = [];
+
+  let liveDrainer;
+  pull(
+    ssb.threads.publicUpdates({ following: true }),
+    (liveDrainer = pull.drain((msgKey) => {
+      updates.push(msgKey);
+    })),
+  );
+
+  let msg1, msg2, msg3, msg4, msg5;
+  pull(
+    pullAsync((cb) => {
+      ssb.db.publish(
+        { type: 'contact', contact: maryKeys.id, following: true },
+        cb,
+      );
+    }),
+    pull.asyncMap((_, cb) => {
+      ssb.db.create(
+        { content: { type: 'post', text: 'Root post from Lucy' } },
+        cb,
+        wait(cb, 800),
+      );
+    }),
+    pull.asyncMap((msg, cb) => {
+      msg1 = msg;
+      t.equals(updates.length, 0);
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: {
+            type: 'post',
+            text: 'Reply to Lucy root from Mary',
+            root: msg1.key,
+          },
+        },
+        wait(cb, 800),
+      );
+    }),
+    pull.asyncMap((msg, cb) => {
+      msg2 = msg;
+      t.equals(updates.length, 1);
+      t.equals(updates[0], msg2.key);
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: { type: 'post', text: 'Root post from Mary' },
+        },
+        wait(cb, 800),
+      );
+    }),
+    pull.asyncMap((msg, cb) => {
+      msg3 = msg;
+      t.equals(updates.length, 2);
+      t.equals(updates[1], msg3.key);
+      ssb.db.create(
+        {
+          keys: aliceKeys,
+          content: {
+            type: 'post',
+            text: 'Reply to Mary root from Alice',
+            root: msg3.key,
+          },
+        },
+        wait(cb, 800),
+      );
+    }),
+
+    // Following db.create calls should NOT trigger an update
+    pull.asyncMap((msg, cb) => {
+      msg4 = msg;
+      t.equals(updates.length, 3);
+      t.equals(updates[2], msg4.key);
+
+      ssb.db.create(
+        {
+          keys: aliceKeys,
+          content: {
+            type: 'post',
+            text: 'Root post from Alice',
+          },
+        },
+        wait(cb, 800),
+      );
+    }),
+    pull.asyncMap((msg, cb) => {
+      msg5 = msg;
+      t.equals(updates.length, 3);
+      t.equals(updates[2], msg4.key);
+
+      ssb.db.create(
+        {
+          keys: maryKeys,
+          content: {
+            type: 'post',
+            text: 'Reply to Alice from Mary',
+            root: msg5.key,
+          },
+        },
+        wait(cb, 800),
+      );
+    }),
+
+    pull.drain(() => {
+      t.equals(updates.length, 3, 'total updates');
       liveDrainer.abort();
       ssb.close(t.end);
     }),

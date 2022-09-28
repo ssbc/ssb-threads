@@ -4,7 +4,7 @@
 
 ## Usage
 
-This plugin **requires ssb-db2 v3.4.0 or higher** and does not support ssb-db. If the **ssb-friends** plugin is available it will filter the messages of blocked users.
+This plugin **requires ssb-db2 v3.4.0 or higher** and does not support ssb-db. If the **ssb-friends** plugin is available it will filter the messages of blocked users and provide the option of only retrieving information about threads created by users you follow directly.
 
 ```diff
  SecretStack({appKey: require('ssb-caps').shs})
@@ -63,6 +63,7 @@ Returns a pull stream that emits thread objects of public messages.
 * `opts.threadMaxSize`: optional number (default: Infinity). Dictates the maximum amount of messages in each returned thread object. Serves for previewing threads, particularly long ones.
 * `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
+- `opts.following`: optional boolean (default: false). `true` means only threads created by those directly followed (and yourself) will be emitted. Requires `ssb-friends`.
 
 ### `ssb.threads.publicSummary(opts)`
 
@@ -71,6 +72,7 @@ Returns a pull stream that emits summary objects of public threads.
 * `opts.reverse`: boolean, default `true`. `false` means threads will be delivered from oldest to most recent, `true` means they will be delivered from most recent to oldest.
 * `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
+- `opts.following`: optional boolean (default: false). `true` means only summaries for threads created by those directly followed (and yourself) will be emitted. Requires `ssb-friends`.
 
 ### `ssb.threads.publicUpdates(opts)`
 
@@ -79,6 +81,7 @@ Returns a ("live") pull stream that emits a message key (strings) for every new 
 * `opts.includeSelf`: optional boolean that indicates if updates from yourself (the current `ssb.id`) should be included in this stream or not.
 * `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
+- `opts.following`: optional boolean (default: false). `true` means only message keys for threads created by those directly followed will be emitted. Requires `ssb-friends`.
 
 ### `ssb.threads.hashtagSummary(opts)`
 
