@@ -20,18 +20,15 @@
     "lib/*"
   ],
   "dependencies": {
-    "bipf": "^1.5.1",
+    "bipf": "^1.9.0",
     "pull-cat": "^1.1.11",
     "pull-level": "^2.0.4",
     "pull-stream": "^3.6.2",
     "secret-stack-decorators": "1.1.0",
-    "ssb-db2": ">=3.4.1 <=5",
+    "ssb-db2": ">=3.4.1",
     "ssb-ref": "^2.13.0",
     "ssb-sort": "1.1.x",
     "ssb-typescript": "^2.5.0"
-  },
-  "peerDependencies": {
-    "jitdb": ">=3.3.0"
   },
   "devDependencies": {
     "@types/node": "^14.14.37",
@@ -40,9 +37,9 @@
     "pull-notify": "^0.1.1",
     "secret-stack": "6.4.1",
     "ssb-caps": "^1.1.0",
-    "ssb-db2": "^5.1.0",
+    "ssb-db2": "^6.2.3",
     "ssb-friends": "^5.1.7",
-    "ssb-keys": "8.4.1",
+    "ssb-keys": "8.5.0",
     "tap-arc": "~0.3.5",
     "tape": "^5.5.3",
     "ts-node": "^9.1.1",
