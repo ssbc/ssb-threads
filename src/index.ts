@@ -331,6 +331,31 @@ class threads {
     });
   };
 
+  private rootMsgIdForHashtagMatch = (
+    hashtag: string,
+    opts: {
+      needsDescending: boolean;
+      msgPassesFilter: (msg: Msg) => boolean;
+      queryFilter: any;
+    },
+  ) => {
+    return pull(
+      this.ssb.db.query(
+        where(and(isPublic(), hasHashtag(hashtag), opts.queryFilter)),
+        opts.needsDescending ? descending() : null,
+        batch(BATCH_SIZE),
+        toPullStream(),
+      ),
+      pull.map(getRootMsgId),
+      pull.filter(isUniqueMsgId(new Set())),
+      this.fetchMsgFromIdIfItExists,
+      pull.filter(opts.msgPassesFilter),
+      pull.filter(isPublicType),
+      pull.filter(hasNoBacklinks),
+      this.removeMessagesFromBlocked,
+    );
+  };
+
   //#endregion
 
   //#region PUBLIC API
@@ -442,30 +467,37 @@ class threads {
     );
   };
 
+  @muxrpc('async')
+  public hashtagCount = (
+    opts: Omit<HashtagOpts, 'maxThreadSize' | 'reverse' | 'following'>,
+    cb: CB<number>,
+  ) => {
+    pull(
+      this.rootMsgIdForHashtagMatch(opts.hashtag, {
+        needsDescending: false,
+        msgPassesFilter: makePassesFilter(opts),
+        queryFilter: makeFilterOperator(opts),
+      }),
+      pull.reduce((count: number) => count + 1, 0, cb),
+    );
+  };
+
   @muxrpc('source')
-  public hashtagSummary = (opts: Omit<HashtagOpts, 'threadMaxSize'>) => {
-    const needsDescending = opts.reverse ?? true;
+  public hashtagSummary = (
+    opts: Omit<HashtagOpts, 'threadMaxSize' | 'following'>,
+  ) => {
     const filterOperator = makeFilterOperator(opts);
-    const passesFilter = makePassesFilter(opts);
     const timestamps = new Map<MsgId, number>();
 
     return pull(
-      this.ssb.db.query(
-        where(and(isPublic(), hasHashtag(opts.hashtag), filterOperator)),
-        needsDescending ? descending() : null,
-        batch(BATCH_SIZE),
-        toPullStream(),
-      ),
+      this.rootMsgIdForHashtagMatch(opts.hashtag, {
+        needsDescending: opts.reverse ?? true,
+        msgPassesFilter: makePassesFilter(opts),
+        queryFilter: filterOperator,
+      }),
       pull.through((msg: Msg) =>
         timestamps.set(getRootMsgId(msg), getTimestamp(msg)),
       ),
-      pull.map(getRootMsgId),
-      pull.filter(isUniqueMsgId(new Set())),
-      this.fetchMsgFromIdIfItExists,
-      pull.filter(passesFilter),
-      pull.filter(isPublicType),
-      pull.filter(hasNoBacklinks),
-      this.removeMessagesFromBlocked,
       pull.asyncMap(this.nonBlockedRootToSummary(filterOperator, timestamps)),
     );
   };
