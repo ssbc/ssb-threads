@@ -83,6 +83,16 @@ Returns a ("live") pull stream that emits a message key (strings) for every new 
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
 - `opts.following`: optional boolean (default: false). `true` means only message keys for threads created by those directly followed will be emitted. Requires `ssb-friends`.
 
+
+### `ssb.threads.hashtagCount(opts, cb)`
+
+Gets the number of public threads that match a specific hashtag `opts.hashtag`. "Hashtag" here means `msg.value.content.channel` and `msg.value.content.mentions[].link` (beginning with `#`).
+
+* `opts.hashtag`: string, required. This is a short hashtag string such as `#animals` that identifies which content categary we are interested in.
+* `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
+* `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
+
+
 ### `ssb.threads.hashtagSummary(opts)`
 
 Similar to `publicSummary` but limits the results to public threads that match a specific hashtag `opts.hashtag`. "Hashtag" here means `msg.value.content.channel` and `msg.value.content.mentions[].link` (beginning with `#`).
