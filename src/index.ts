@@ -273,10 +273,7 @@ class threads {
     };
   };
 
-  private nonBlockedRootToSummary = (
-    filter: any,
-    timestamps: Map<MsgId, number>,
-  ) => {
+  private nonBlockedRootToSummary = (filter: any) => {
     return (root: Msg, cb: CB<ThreadSummary>) => {
       pull(
         this.ssb.db.query(
@@ -288,10 +285,7 @@ class threads {
         this.removeMessagesFromBlocked,
         pull.collect((err: any, arr: Array<Msg>) => {
           if (err) return cb(err);
-          const timestamp = Math.max(
-            timestamps.get(root.key) ?? 0,
-            ...arr.map(getTimestamp),
-          );
+          const timestamp = Math.max(...arr.concat(root).map(getTimestamp));
           cb(null, { root, replyCount: arr.length, timestamp });
         }),
       );
@@ -401,7 +395,6 @@ class threads {
     const followingOnly = opts.following ?? false;
     const filterOperator = makeFilterOperator(opts);
     const passesFilter = makePassesFilter(opts);
-    const timestamps = new Map<MsgId, number>();
 
     try {
       assertFollowingOnlyUsability(followingOnly, this.isFollowing);
@@ -416,9 +409,6 @@ class threads {
         batch(BATCH_SIZE),
         toPullStream(),
       ),
-      pull.through((msg: Msg) =>
-        timestamps.set(getRootMsgId(msg), getTimestamp(msg)),
-      ),
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
       this.fetchMsgFromIdIfItExists,
@@ -429,7 +419,7 @@ class threads {
       followingOnly
         ? this.onlyKeepFollowingRootMessages(this.isFollowing)
         : pull.through(),
-      pull.asyncMap(this.nonBlockedRootToSummary(filterOperator, timestamps)),
+      pull.asyncMap(this.nonBlockedRootToSummary(filterOperator)),
     );
   };
 
@@ -487,7 +477,6 @@ class threads {
     opts: Omit<HashtagOpts, 'threadMaxSize' | 'following'>,
   ) => {
     const filterOperator = makeFilterOperator(opts);
-    const timestamps = new Map<MsgId, number>();
 
     return pull(
       this.rootMsgIdForHashtagMatch(opts.hashtag, {
@@ -495,10 +484,7 @@ class threads {
         msgPassesFilter: makePassesFilter(opts),
         queryFilter: filterOperator,
       }),
-      pull.through((msg: Msg) =>
-        timestamps.set(getRootMsgId(msg), getTimestamp(msg)),
-      ),
-      pull.asyncMap(this.nonBlockedRootToSummary(filterOperator, timestamps)),
+      pull.asyncMap(this.nonBlockedRootToSummary(filterOperator)),
     );
   };
 
@@ -582,7 +568,6 @@ class threads {
     const needsDescending = opts.reverse ?? true;
     const filterOperator = makeFilterOperator(opts);
     const passesFilter = makePassesFilter(opts);
-    const timestamps = new Map<MsgId, number>();
 
     return pull(
       this.ssb.db.query(
@@ -591,9 +576,6 @@ class threads {
         batch(BATCH_SIZE),
         toPullStream(),
       ),
-      pull.through((msg: Msg) =>
-        timestamps.set(getRootMsgId(msg), getTimestamp(msg)),
-      ),
       pull.map(getRootMsgId),
       pull.filter(isUniqueMsgId(new Set())),
       this.fetchMsgFromIdIfItExists,
@@ -601,7 +583,7 @@ class threads {
       pull.filter(isPublicType),
       pull.filter(hasNoBacklinks),
       this.removeMessagesFromBlocked,
-      pull.asyncMap(this.nonBlockedRootToSummary(filterOperator, timestamps)),
+      pull.asyncMap(this.nonBlockedRootToSummary(filterOperator)),
     );
   };
 
