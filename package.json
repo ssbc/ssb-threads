@@ -47,7 +47,7 @@
   },
   "scripts": {
     "compile": "tsc",
-    "tape": "tape test/index.js | tap-arc --bail",
+    "tape": "tape test/*.test.js | tap-arc --bail",
     "test": "npm run compile && npm run tape",
     "coverage": "c8 --reporter=lcov npm run test"
   }
