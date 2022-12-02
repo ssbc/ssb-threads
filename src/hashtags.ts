@@ -17,6 +17,7 @@ function sanitize(hashtag: string) {
 
 type LevelKey = [string, number];
 type LevelValue = Buffer;
+type AAOLRecord = { value: Buffer; offset: number };
 
 const INDEX_NAME = 'hashtags';
 const INDEX_VERSION = 2;
@@ -36,12 +37,22 @@ export = class HashtagPlugin extends DB2Plugin {
     });
   }
 
-  processRecord(record: { value: Buffer; offset: number }, seq: number, pValue: number) {
+  processRecord(record: AAOLRecord, seq: number, pValue: number) {
     const buf = record.value;
     const pValueContent = bipf.seekKey2(buf, pValue, BIPF_CONTENT, 0);
     if (pValueContent < 0) return;
-    const pValueContentChannel = bipf.seekKey2(buf, pValueContent, BIPF_CHANNEL, 0);
-    const pValueContentMentions = bipf.seekKey2(buf, pValueContent, BIPF_MENTIONS, 0);
+    const pValueContentChannel = bipf.seekKey2(
+      buf,
+      pValueContent,
+      BIPF_CHANNEL,
+      0,
+    );
+    const pValueContentMentions = bipf.seekKey2(
+      buf,
+      pValueContent,
+      BIPF_MENTIONS,
+      0,
+    );
 
     if (pValueContentChannel >= 0) {
       const channel = bipf.decode(buf, pValueContentChannel);
