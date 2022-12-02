@@ -326,7 +326,7 @@ class threads {
   };
 
   private rootMsgIdForHashtagMatch = (
-    hashtag: string,
+    hashtags: Array<string>,
     opts: {
       needsDescending: boolean;
       msgPassesFilter: (msg: Msg) => boolean;
@@ -335,7 +335,7 @@ class threads {
   ) => {
     return pull(
       this.ssb.db.query(
-        where(and(isPublic(), hasHashtag(hashtag), opts.queryFilter)),
+        where(and(isPublic(), hasHashtag(hashtags), opts.queryFilter)),
         opts.needsDescending ? descending() : null,
         batch(BATCH_SIZE),
         toPullStream(),
@@ -462,8 +462,13 @@ class threads {
     opts: Omit<HashtagOpts, 'maxThreadSize' | 'reverse' | 'following'>,
     cb: CB<number>,
   ) => {
+    if (!opts.hashtag || typeof opts.hashtag !== 'string') {
+      cb(new Error('opts.hashtag is required'));
+      return;
+    }
+
     pull(
-      this.rootMsgIdForHashtagMatch(opts.hashtag, {
+      this.rootMsgIdForHashtagMatch([opts.hashtag], {
         needsDescending: false,
         msgPassesFilter: makePassesFilter(opts),
         queryFilter: makeFilterOperator(opts),
@@ -477,9 +482,28 @@ class threads {
     opts: Omit<HashtagOpts, 'threadMaxSize' | 'following'>,
   ) => {
     const filterOperator = makeFilterOperator(opts);
+    let hashtags: Array<string> | null = null;
+    if (opts.hashtags && Array.isArray(opts.hashtags)) {
+      if (opts.hashtags.length === 0) {
+        return pull.error(new Error('opts.hashtags must have at least one'));
+      }
+      if (opts.hashtags.some((h) => !h || typeof h !== 'string')) {
+        return pull.error(
+          new Error(
+            'opts.hashtags must be an array of strings, but got: ' +
+              opts.hashtags,
+          ),
+        );
+      }
+      hashtags = opts.hashtags;
+    } else if (opts.hashtag && typeof opts.hashtag === 'string') {
+      hashtags = [opts.hashtag];
+    } else {
+      return pull.error(new Error('opts.hashtag or opts.hashtags is required'));
+    }
 
     return pull(
-      this.rootMsgIdForHashtagMatch(opts.hashtag, {
+      this.rootMsgIdForHashtagMatch(hashtags, {
         needsDescending: opts.reverse ?? true,
         msgPassesFilter: makePassesFilter(opts),
         queryFilter: filterOperator,

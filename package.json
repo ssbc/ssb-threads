@@ -35,6 +35,7 @@
     "c8": "^7.11.0",
     "pull-async": "1.0.0",
     "pull-notify": "^0.1.1",
+    "pull-stream": "3.7.0",
     "secret-stack": "6.4.1",
     "ssb-caps": "^1.1.0",
     "ssb-db2": "^6.2.3",

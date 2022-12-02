@@ -97,7 +97,8 @@ Gets the number of public threads that match a specific hashtag `opts.hashtag`. 
 
 Similar to `publicSummary` but limits the results to public threads that match a specific hashtag `opts.hashtag`. "Hashtag" here means `msg.value.content.channel` and `msg.value.content.mentions[].link` (beginning with `#`).
 
-* `opts.hashtag`: string, required. This is a short hashtag string such as `#animals` that identifies which content category we are interested in.
+* `opts.hashtag`: string, required unless you have `opts.hashtags`. This is a short hashtag string such as `#animals` that identifies which content category we are interested in.
+* `opts.hashtags`: array of strings, optional. Like `opts.hashtag` but allows you to specify multiple hashtags such that summaries returned will match *any* of the hashtags.
 * `opts.reverse`: boolean, default `true`. `false` means threads will be delivered from oldest to most recent, `true` means they will be delivered from most recent to oldest.
 * `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.

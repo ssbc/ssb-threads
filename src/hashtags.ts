@@ -28,11 +28,11 @@ export = class HashtagPlugin extends DB2Plugin {
     super(log, dir, INDEX_NAME, INDEX_VERSION, 'json', 'binary');
   }
 
-  static operator(text: string) {
+  static operator(texts: Array<string>) {
     return deferred((meta: any, cb: any, onAbort: any) => {
       meta.db.onDrain(INDEX_NAME, () => {
         const plugin = meta.db.getIndex(INDEX_NAME) as HashtagPlugin;
-        plugin.getMessagesByHashtag(text, cb, onAbort);
+        plugin.getMessagesByHashtags(texts, cb, onAbort);
       });
     });
   }
@@ -85,16 +85,22 @@ export = class HashtagPlugin extends DB2Plugin {
     }
   }
 
-  getMessagesByHashtag(
-    hashtag: any,
+  /**
+   * Gets the `seq` of all messages that have *any* of the given hashtags.
+   */
+  getMessagesByHashtags(
+    hashtags: Array<string>,
     cb: (err: any, opData?: any) => void,
     onAbort: (listener: () => void) => void,
   ) {
-    if (!hashtag || typeof hashtag !== 'string') return cb(null, seqs([]));
+    if (!hashtags || !Array.isArray(hashtags)) return cb(null, seqs([]));
 
-    const label = sanitize(hashtag);
+    const labels = hashtags.map(sanitize);
     let drainer: { abort: () => void } | undefined;
     const seqArr: Array<number> = [];
+    const sortedLabels = labels.sort((a, b) => a.localeCompare(b));
+    const minLabel = sortedLabels[0];
+    const maxLabel = sortedLabels[sortedLabels.length - 1];
 
     onAbort(() => {
       drainer?.abort();
@@ -102,16 +108,21 @@ export = class HashtagPlugin extends DB2Plugin {
 
     pull(
       pl.read(this.level, {
-        gte: [label, ''],
-        lte: [label, undefined],
+        gte: [minLabel, ''],
+        lte: [maxLabel, undefined],
         keys: true,
         keyEncoding: this.keyEncoding,
         values: false,
       }),
       (drainer = pull.drain(
-        ([, seq]: LevelKey) => seqArr.push(seq),
+        ([label, seq]: LevelKey) => {
+          if (labels.length === 1 || labels.includes(label)) {
+            seqArr.push(seq);
+          }
+        },
         (err: any) => {
-          if (err) return cb(err);
+          drainer = undefined;
+          if (err) cb(err);
           else cb(null, seqs(seqArr));
         },
       )),

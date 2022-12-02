@@ -29,6 +29,7 @@ export type Opts = {
 export type HashtagOpts = {
   reverse?: boolean;
   hashtag: string;
+  hashtags?: Array<string>;
   threadMaxSize?: number;
 } & FilterOpts;
 

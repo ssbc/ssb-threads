@@ -2,6 +2,7 @@ const test = require('tape');
 const pull = require('pull-stream');
 const ssbKeys = require('ssb-keys');
 const pullAsync = require('pull-async');
+const p = require('util').promisify;
 const Testbot = require('./testbot');
 const wait = require('./wait');
 
@@ -143,6 +144,73 @@ test('threads.hashtagSummary understands msg.value.content.mentions', (t) => {
       );
       t.equals(summary.root.value.content.text, 'Dog');
 
+      ssb.close(t.end);
+    }),
+  );
+});
+
+test('threads.hashtagSummary accepts array of hashtags', async (t) => {
+  const ssb = Testbot({ keys: lucyKeys });
+
+  const rootMsg = await p(ssb.db.publish)({
+    type: 'post',
+    text: 'Dog',
+    mentions: [{ link: '#animals' }],
+  });
+
+  await p(ssb.db.publish)({
+    type: 'post',
+    text: 'poodle',
+    root: rootMsg.key,
+  });
+
+  await p(ssb.db.publish)({
+    type: 'post',
+    text: 'Pizza',
+    mentions: [{ link: '#food' }],
+  });
+
+  await p(ssb.db.publish)({
+    type: 'post',
+    text: 'Cat',
+  });
+
+  await p(setTimeout)(100);
+
+  const summaries = await pull(
+    ssb.threads.hashtagSummary({ hashtags: ['animals', 'food'] }),
+    pull.collectAsPromise(),
+  );
+
+  t.equals(summaries.length, 2, 'two summaries');
+  const [s1, s2] = summaries;
+  t.equals(s1.root.value.content.text, 'Pizza', '1st summary is Pizza');
+  t.equals(s2.root.value.content.text, 'Dog', '2nd summary is Dog');
+
+  await p(ssb.close)();
+});
+
+test('threads.hashtagSummary opts.hashtags not an array', (t) => {
+  const ssb = Testbot({ keys: lucyKeys });
+
+  pull(
+    ssb.threads.hashtagSummary({ hashtags: 1234 }),
+    pull.collect((err, ary) => {
+      t.ok(err, 'throws error');
+      t.equals(ary.length, 0, 'no summaries');
+      ssb.close(t.end);
+    }),
+  );
+});
+
+test('threads.hashtagSummary opts.hashtags invalid array', (t) => {
+  const ssb = Testbot({ keys: lucyKeys });
+
+  pull(
+    ssb.threads.hashtagSummary({ hashtags: [10, 'twenty', 'thirty'] }),
+    pull.collect((err, ary) => {
+      t.ok(err, 'throws error');
+      t.equals(ary.length, 0, 'no summaries');
       ssb.close(t.end);
     }),
   );
