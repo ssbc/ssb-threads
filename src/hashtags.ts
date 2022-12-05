@@ -2,7 +2,7 @@ const bipf = require('bipf');
 const pl = require('pull-level');
 const pull = require('pull-stream');
 const DB2Plugin = require('ssb-db2/indexes/plugin');
-const { seqs, deferred } = require('ssb-db2/operators');
+const { seqs, liveSeqs, deferred } = require('ssb-db2/operators');
 
 const B_0 = Buffer.alloc(0);
 const BIPF_CONTENT = bipf.allocAndEncode('content');
@@ -32,7 +32,7 @@ export = class HashtagPlugin extends DB2Plugin {
     return deferred((meta: any, cb: any, onAbort: any) => {
       meta.db.onDrain(INDEX_NAME, () => {
         const plugin = meta.db.getIndex(INDEX_NAME) as HashtagPlugin;
-        plugin.getMessagesByHashtags(texts, cb, onAbort);
+        plugin.getMessagesByHashtags(texts, meta.live, cb, onAbort);
       });
     });
   }
@@ -90,40 +90,62 @@ export = class HashtagPlugin extends DB2Plugin {
    */
   getMessagesByHashtags(
     hashtags: Array<string>,
+    live: 'liveOnly' | 'liveAndOld' | undefined,
     cb: (err: any, opData?: any) => void,
     onAbort: (listener: () => void) => void,
   ) {
     if (!hashtags || !Array.isArray(hashtags)) return cb(null, seqs([]));
+    if (live === 'liveAndOld') return cb(new Error('unimplemented liveAndOld'));
 
     const labels = hashtags.map(sanitize);
-    let drainer: { abort: () => void } | undefined;
-    const seqArr: Array<number> = [];
     const sortedLabels = labels.sort((a, b) => a.localeCompare(b));
+    const minLabel = sortedLabels[0];
+    const maxLabel = sortedLabels[sortedLabels.length - 1];
 
-    onAbort(() => {
-      drainer?.abort();
-    });
-
-    pull(
-      pull.values(sortedLabels),
-      pull.map((label: string) =>
+    if (live) {
+      const ps = pull(
         pl.read(this.level, {
-          gte: [label, ''],
-          lte: [label, undefined],
+          gte: [minLabel, ''],
+          lte: [maxLabel, undefined],
           keys: true,
           keyEncoding: this.keyEncoding,
           values: false,
+          live: true,
+          old: false,
         }),
-      ),
-      pull.flatten(),
-      (drainer = pull.drain(
-        ([, seq]: LevelKey) => seqArr.push(seq),
-        (err: any) => {
-          drainer = undefined;
-          if (err) cb(err);
-          else cb(null, seqs(seqArr));
-        },
-      )),
-    );
+        pull.filter(([label, _seq]: LevelKey) => labels.includes(label)),
+        pull.map(([_label, seq]: LevelKey) => seq),
+      );
+      return cb(null, liveSeqs(ps));
+    } else {
+      let drainer: { abort: () => void } | undefined;
+
+      onAbort(() => {
+        drainer?.abort();
+      });
+
+      const seqArr: Array<number> = [];
+      pull(
+        pull.values(sortedLabels),
+        pull.map((label: string) =>
+          pl.read(this.level, {
+            gte: [label, ''],
+            lte: [label, undefined],
+            keys: true,
+            keyEncoding: this.keyEncoding,
+            values: false,
+          }),
+        ),
+        pull.flatten(),
+        (drainer = pull.drain(
+          ([, seq]: LevelKey) => seqArr.push(seq),
+          (err: any) => {
+            drainer = undefined;
+            if (err) cb(err);
+            else cb(null, seqs(seqArr));
+          },
+        )),
+      );
+    }
   }
 };

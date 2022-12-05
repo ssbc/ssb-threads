@@ -14,6 +14,7 @@ import {
   ThreadUpdatesOpts,
   ThreadSummary,
   HashtagOpts,
+  HashtagUpdatesOpts,
 } from './types';
 const pull = require('pull-stream');
 const cat = require('pull-cat');
@@ -509,6 +510,40 @@ class threads {
         queryFilter: filterOperator,
       }),
       pull.asyncMap(this.nonBlockedRootToSummary(filterOperator)),
+    );
+  };
+
+  @muxrpc('source')
+  public hashtagUpdates = (opts: HashtagUpdatesOpts) => {
+    const filterOperator = makeFilterOperator(opts);
+    let hashtags: Array<string> | null = null;
+    if (opts.hashtags && Array.isArray(opts.hashtags)) {
+      if (opts.hashtags.length === 0) {
+        return pull.error(new Error('opts.hashtags must have at least one'));
+      }
+      if (opts.hashtags.some((h) => !h || typeof h !== 'string')) {
+        return pull.error(
+          new Error(
+            'opts.hashtags must be an array of strings, but got: ' +
+              opts.hashtags,
+          ),
+        );
+      }
+      hashtags = opts.hashtags;
+    } else if (opts.hashtag && typeof opts.hashtag === 'string') {
+      hashtags = [opts.hashtag];
+    } else {
+      return pull.error(new Error('opts.hashtag or opts.hashtags is required'));
+    }
+
+    return pull(
+      this.ssb.db.query(
+        where(and(isPublic(), hasHashtag(hashtags), filterOperator)),
+        live({ old: false }),
+        toPullStream(),
+      ),
+      this.removeMessagesFromBlocked,
+      pull.map(getRootMsgId),
     );
   };
 

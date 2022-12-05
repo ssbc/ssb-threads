@@ -37,6 +37,10 @@ export type UpdatesOpts = {
   includeSelf?: boolean;
 } & FilterOpts;
 
+export type HashtagUpdatesOpts =
+  | ({ hashtag: string; hashtags: undefined } & FilterOpts)
+  | ({ hashtag: undefined; hashtags: Array<string> } & FilterOpts);
+
 export type ThreadOpts = {
   root: MsgId;
   private?: boolean;

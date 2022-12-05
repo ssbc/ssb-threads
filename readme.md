@@ -103,6 +103,15 @@ Similar to `publicSummary` but limits the results to public threads that match a
 * `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
 
+### `ssb.threads.hashtagUpdates(opts)`
+
+Returns a ("live") pull stream that emits the message key (string) for thread roots every time there is a new reply or root tagged with the given `opts.hashtag`, and that passes the (optional) allowlist or blocklist.
+
+* `opts.hashtag`: string, required unless you have `opts.hashtags`. This is a short hashtag string such as `#animals` that identifies which content category we are interested in.
+* `opts.hashtags`: array of strings, optional. Like `opts.hashtag` but allows you to specify multiple hashtags such that summaries returned will match *any* of the hashtags.
+* `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
+* `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
+
 
 ### `ssb.threads.private(opts)`
 
