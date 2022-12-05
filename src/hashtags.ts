@@ -99,27 +99,25 @@ export = class HashtagPlugin extends DB2Plugin {
     let drainer: { abort: () => void } | undefined;
     const seqArr: Array<number> = [];
     const sortedLabels = labels.sort((a, b) => a.localeCompare(b));
-    const minLabel = sortedLabels[0];
-    const maxLabel = sortedLabels[sortedLabels.length - 1];
 
     onAbort(() => {
       drainer?.abort();
     });
 
     pull(
-      pl.read(this.level, {
-        gte: [minLabel, ''],
-        lte: [maxLabel, undefined],
-        keys: true,
-        keyEncoding: this.keyEncoding,
-        values: false,
-      }),
+      pull.values(sortedLabels),
+      pull.map((label: string) =>
+        pl.read(this.level, {
+          gte: [label, ''],
+          lte: [label, undefined],
+          keys: true,
+          keyEncoding: this.keyEncoding,
+          values: false,
+        }),
+      ),
+      pull.flatten(),
       (drainer = pull.drain(
-        ([label, seq]: LevelKey) => {
-          if (labels.length === 1 || labels.includes(label)) {
-            seqArr.push(seq);
-          }
-        },
+        ([, seq]: LevelKey) => seqArr.push(seq),
         (err: any) => {
           drainer = undefined;
           if (err) cb(err);
