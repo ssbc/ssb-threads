@@ -132,7 +132,8 @@ Returns a ("live") pull stream that emits the message key (string) for thread ro
 
 ### `ssb.threads.profile(opts)`
 
-Returns a pull stream that emits thread objects of public messages initiated by a certain profile `id`.
+Returns a pull stream that emits thread objects of public messages in which a certain profile `id`
+participated in.
 
 * `opts.id`: FeedId of some SSB user.
 * `opts.reverse`: boolean., default `true`. `false` means threads will be delivered from oldest to most recent, `true` means they will be delivered from most recent to oldest.
