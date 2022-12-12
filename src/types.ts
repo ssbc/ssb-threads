@@ -54,4 +54,5 @@ export type ThreadUpdatesOpts = {
 
 export type ProfileOpts = Opts & {
   id: string;
+  initiatedOnly: boolean;
 };
