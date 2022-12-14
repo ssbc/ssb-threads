@@ -140,7 +140,7 @@ participated in.
 * `opts.threadMaxSize`: optional number (default: Infinity). Dictates the maximum amount of messages in each returned thread object. Serves for previewing threads, particularly long ones.
 * `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
-* `opts.initiatedOnly`: boolean., default `false`. `true` means only threads which `opts.id` is the profile that started that thread will be emitted, `false` means any thread in which the profile participated will be emitted.
+* `opts.initiatedOnly`: optional boolean (default `false`), where `true` means only threads which `opts.id` is the profile that started that thread will be emitted, `false` means any thread in which the profile participated will be emitted.
 
 ### `ssb.threads.profileSummary(opts)`
 

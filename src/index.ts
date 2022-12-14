@@ -604,7 +604,7 @@ class threads {
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
     const filterOperator = makeFilterOperator(opts);
     const passesFilter = makePassesFilter(opts);
-    const initiatedOnly = opts.initiatedOnly ?? false
+    const initiatedOnly = opts.initiatedOnly ?? false;
 
     return pull(
       this.ssb.db.query(
