@@ -15,6 +15,7 @@ import {
   ThreadSummary,
   HashtagOpts,
   HashtagUpdatesOpts,
+  HashtagsMatchingOpts,
 } from './types';
 const pull = require('pull-stream');
 const cat = require('pull-cat');
@@ -545,6 +546,22 @@ class threads {
       this.removeMessagesFromBlocked,
       pull.map(getRootMsgId),
     );
+  };
+
+  @muxrpc('async')
+  public hashtagsMatching = (
+    opts: HashtagsMatchingOpts,
+    cb: CB<Array<[string, number]>>,
+  ) => {
+    if (opts.query.length === 0)
+      return cb(new Error('opts.query must be non-empty string'));
+    if (opts.limit && opts.limit <= 0)
+      return cb(new Error('opts.limit must be number greater than 0'));
+
+    this.ssb.db.onDrain('hashtags', () => {
+      const hashtagsPlugin: HashtagsPlugin = this.ssb.db.getIndex('hashtags');
+      hashtagsPlugin.getMatchingHashtags(opts.query, opts.limit || 10, cb);
+    });
   };
 
   @muxrpc('source')

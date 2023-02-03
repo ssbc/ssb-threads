@@ -148,4 +148,48 @@ export = class HashtagPlugin extends DB2Plugin {
       );
     }
   }
+
+  /**
+   * Gets a list of hashtags of length `limit` that start with the `query`
+   */
+  getMatchingHashtags(
+    query: string,
+    limit: number,
+    cb: (err: any, data?: any) => void,
+  ) {
+    // hashtag -> count
+    const result = new Map<string, number>();
+
+    // Upperbound is determined by replacing the last character of the query with the one whose char code is +1 greater
+    const lessThan =
+      query.slice(0, query.length - 1) +
+      String.fromCharCode(query.charCodeAt(query.length - 1) + 1);
+
+    pull(
+      pl.read(this.level, {
+        gte: [query, ''],
+        lt: [lessThan, ''],
+        keys: true,
+        keyEncoding: this.keyEncoding,
+        values: false,
+      }),
+      pull.drain(
+        ([label]: LevelKey) => {
+          const count = result.get(label) || 0;
+          result.set(label, count + 1);
+        },
+        (err: any) => {
+          if (err) cb(err);
+          else {
+            // Order by count from highest to lowest
+            const sorted = Array.from(result.entries()).sort(
+              ([, c1], [, c2]) => c2 - c1,
+            );
+
+            cb(null, limit > 0 ? sorted.slice(0, limit) : sorted);
+          }
+        },
+      ),
+    );
+  }
 };
