@@ -112,6 +112,12 @@ Returns a ("live") pull stream that emits the message key (string) for thread ro
 * `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
 
+### `ssb.threads.hashtagsMatching(opts, cb)`
+
+Call the callback with an array of `[hashtagLabel, count]` tuples where `hashtagLabel` begins with `opts.query`. "hashtagLabel" here means `msg.value.content.channel` and `msg.value.content.mentions[].link` (omitting the `#`). Results are ordered based on the number of occurrences for the hashtag (`count`) from highest to lowest.
+
+* `opts.query`: string, required. Prefix string used to identify the hashtags we are interested in.
+* `opts.limit`: number, default `10`. Limits the number of results that are returned.
 
 ### `ssb.threads.private(opts)`
 

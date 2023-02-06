@@ -55,3 +55,8 @@ export type ThreadUpdatesOpts = {
 export type ProfileOpts = Opts & {
   id: string;
 };
+
+export type HashtagsMatchingOpts = {
+  query: string;
+  limit?: number;
+};
