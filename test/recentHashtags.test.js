@@ -254,7 +254,7 @@ test('threads.recentHashtags respects preserveCase opt', (t) => {
   );
 });
 
-test('threads.recentHashtags returns proper ordering when a relevant msg has many mention links', (t) => {
+test('threads.recentHashtags handles messages with many mentions links', (t) => {
   const ssb = Testbot({ keys: andrewKeys });
 
   pull(
@@ -275,6 +275,19 @@ test('threads.recentHashtags returns proper ordering when a relevant msg has man
         cb,
       );
     }),
+    pull.asyncMap((_, cb) => {
+      ssb.db.create(
+        {
+          keys: andrewKeys,
+          content: {
+            type: 'post',
+            text: '#p4p is 2x cooler than #p2p',
+            mentions: [{ link: '#p4p' }, { link: '#p2p' }],
+          },
+        },
+        cb,
+      );
+    }),
     pull.drain(null, (err) => {
       t.error(err);
 
@@ -282,7 +295,13 @@ test('threads.recentHashtags returns proper ordering when a relevant msg has man
         { limit: 10, preserveCase: true },
         (err2, hashtags) => {
           t.error(err2);
-          t.deepEquals(hashtags, ['beavers', 'wombats', 'animals']);
+          t.deepEquals(hashtags, [
+            'p4p',
+            'p2p',
+            'animals',
+            'wombats',
+            'beavers',
+          ]);
           ssb.close(t.end);
         },
       );

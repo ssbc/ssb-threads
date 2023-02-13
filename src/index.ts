@@ -605,9 +605,7 @@ class threads {
             result.set(lowercaseWithoutHashtag, withoutHashtag);
           }
         } else if (Array.isArray(mentions)) {
-          // Assumes `mentions` goes from oldest to most recent
-          // so we want to process them in reverse order
-          for (const mention of mentions.reverse()) {
+          for (const mention of mentions) {
             const withoutHashtag = withoutLeadingHashtag(mention.link);
             const lowercaseWithoutHashtag = withoutHashtag.toLocaleLowerCase();
 
