@@ -599,8 +599,10 @@ class threads {
           const lowercaseWithoutHashtag = withoutHashtag.toLocaleLowerCase();
 
           // Since the messages received are descending,
-          // we don't want to update the value for associated key if it already exists
-          // because we want the keep the most recent variation of the hashtag (accounts for casing)
+          // we don't want to update the value for
+          // associated key if it already exists
+          // because we want the keep the most recent
+          // variation of the hashtag (accounts for casing)
           if (!result.has(lowercaseWithoutHashtag)) {
             result.set(lowercaseWithoutHashtag, withoutHashtag);
           }
@@ -610,8 +612,10 @@ class threads {
             const lowercaseWithoutHashtag = withoutHashtag.toLocaleLowerCase();
 
             // Since the messages received are descending,
-            // we don't want to update the value for associated key if it already exists
-            // because we want the keep the most recent variation of the hashtag (accounts for casing)
+            // we don't want to update the value for
+            // associated key if it already exists
+            // because we want the keep the most recent
+            // variation of the hashtag (accounts for casing)
             if (!result.has(lowercaseWithoutHashtag)) {
               result.set(lowercaseWithoutHashtag, withoutHashtag);
             }
