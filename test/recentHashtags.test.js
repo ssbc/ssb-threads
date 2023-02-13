@@ -272,7 +272,7 @@ test('threads.recentHashtags handles messages with many mentions links', (t) => 
             ],
           },
         },
-        cb,
+        wait(cb, 100),
       );
     }),
     pull.asyncMap((_, cb) => {
@@ -285,7 +285,7 @@ test('threads.recentHashtags handles messages with many mentions links', (t) => 
             mentions: [{ link: '#p4p' }, { link: '#p2p' }],
           },
         },
-        cb,
+        wait(cb, 100),
       );
     }),
     pull.drain(null, (err) => {
