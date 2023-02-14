@@ -128,6 +128,13 @@ Returns a pull stream that emits thread objects of private conversations.
 * `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
 
+### `ssb.threads.recentHashtags(opts, cb)`
+
+Call the callback with an array of hashtags labels of length `opts.limit` (defaults to 10 if unspecified). "hashtagLabel" here means `msg.value.content.channel` and `msg.value.content.mentions[].link` (omitting the `#`). Results are ordered with the most recent first, as determined by the log.
+
+* `opts.limit`: number, required. Limits the number of results that are returned.
+* `opts.preserveCase`: optional boolean, default `false`. Return the hashtag labels with their original casing. By default, all hashtag labels are converted to lowercase but there are times when it's preferable to preserve the casing as seen in the log.
+
 ### `ssb.threads.privateUpdates(opts)`
 
 Returns a ("live") pull stream that emits the message key (string) for thread roots every time there is a new reply or root, and that passes the (optional) allowlist or blocklist.

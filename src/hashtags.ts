@@ -23,16 +23,25 @@ const INDEX_NAME = 'hashtags';
 const INDEX_VERSION = 2;
 
 // [hashtagLabel, seq] => B_0
-export = class HashtagPlugin extends DB2Plugin {
+export default class HashtagPlugin extends DB2Plugin {
   constructor(log: any, dir: string) {
     super(log, dir, INDEX_NAME, INDEX_VERSION, 'json', 'binary');
   }
 
-  static operator(texts: Array<string>) {
+  static hasHashtagOperator(texts: Array<string>) {
     return deferred((meta: any, cb: any, onAbort: any) => {
       meta.db.onDrain(INDEX_NAME, () => {
         const plugin = meta.db.getIndex(INDEX_NAME) as HashtagPlugin;
         plugin.getMessagesByHashtags(texts, meta.live, cb, onAbort);
+      });
+    });
+  }
+
+  static hasSomeHashtagOperator() {
+    return deferred((meta: any, cb: any, onAbort: any) => {
+      meta.db.onDrain(INDEX_NAME, () => {
+        const plugin = meta.db.getIndex(INDEX_NAME) as HashtagPlugin;
+        plugin.getMessagesWithSomeHashtag(meta.live, cb, onAbort);
       });
     });
   }
@@ -150,6 +159,57 @@ export = class HashtagPlugin extends DB2Plugin {
   }
 
   /**
+   * Generalized version of `getMesssagesByHashtag`.
+   * Gets the `seq` of all messages that have *some* hashtag.
+   */
+  getMessagesWithSomeHashtag(
+    live: 'liveOnly' | 'liveAndOld' | undefined,
+    cb: (err: any, opData?: any) => void,
+    onAbort: (listener: () => void) => void,
+  ) {
+    if (live === 'liveAndOld') return cb(new Error('unimplemented liveAndOld'));
+
+    const sharedReadOpts = {
+      gt: ['', ''],
+      lt: [undefined, undefined],
+      keys: true,
+      keyEncoding: this.keyEncoding,
+      values: false,
+    };
+
+    if (live) {
+      const ps = pull(
+        pl.read(this.level, {
+          ...sharedReadOpts,
+          live: true,
+          old: false,
+        }),
+        pull.map(([, seq]: LevelKey) => seq),
+      );
+      return cb(null, liveSeqs(ps));
+    } else {
+      let drainer: { abort: () => void } | undefined;
+
+      onAbort(() => {
+        drainer?.abort();
+      });
+
+      const seqArr: Array<number> = [];
+      pull(
+        pl.read(this.level, sharedReadOpts),
+        (drainer = pull.drain(
+          ([, seq]: LevelKey) => seqArr.push(seq),
+          (err: any) => {
+            drainer = undefined;
+            if (err) cb(err);
+            else cb(null, seqs(seqArr));
+          },
+        )),
+      );
+    }
+  }
+
+  /**
    * Gets a list of hashtags of length `limit` that start with the `query`
    */
   getMatchingHashtags(
@@ -192,4 +252,4 @@ export = class HashtagPlugin extends DB2Plugin {
       ),
     );
   }
-};
+}

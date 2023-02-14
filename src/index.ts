@@ -16,6 +16,7 @@ import {
   HashtagOpts,
   HashtagUpdatesOpts,
   HashtagsMatchingOpts,
+  RecentHashtagsOpts,
 } from './types';
 const pull = require('pull-stream');
 const cat = require('pull-cat');
@@ -37,8 +38,11 @@ const {
   hasFork,
   toPullStream,
 } = require('ssb-db2/operators');
-import HashtagsPlugin = require('./hashtags');
-const hasHashtag = HashtagsPlugin.operator;
+
+import HashtagsPlugin from './hashtags';
+
+const hasHashtag = HashtagsPlugin.hasHashtagOperator;
+const hasSomeHashtag = HashtagsPlugin.hasSomeHashtagOperator;
 
 type CB<T> = (err: any, val?: T) => void;
 
@@ -91,6 +95,11 @@ function hasNoBacklinks(msg: Msg<any>): boolean {
 
 function notNull(x: any): boolean {
   return x !== null;
+}
+
+// Strip leading # from hashtag string
+function withoutLeadingHashtag(s: string) {
+  return s.startsWith('#') ? s.slice(1) : s;
 }
 
 function makeFilterOperator(opts: FilterOpts): any {
@@ -562,6 +571,65 @@ class threads {
       const hashtagsPlugin: HashtagsPlugin = this.ssb.db.getIndex('hashtags');
       hashtagsPlugin.getMatchingHashtags(opts.query, opts.limit || 10, cb);
     });
+  };
+
+  @muxrpc('async')
+  public recentHashtags = (opts: RecentHashtagsOpts, cb: CB<Array<string>>) => {
+    if (typeof opts.limit !== 'number' || opts.limit <= 0)
+      return cb(new Error('Limit must be number greater than 0'));
+
+    const preserveCase = !!opts.preserveCase;
+
+    // completely normalized hashtag (no leading # and lowercase) -> partially normalized (no leading #)
+    const result = new Map<string, string>();
+
+    return pull(
+      this.ssb.db.query(
+        where(and(isPublic(), hasSomeHashtag())),
+        descending(),
+        batch(BATCH_SIZE),
+        toPullStream(),
+      ),
+      this.removeMessagesFromBlocked,
+      pull.through((msg: Msg<any>) => {
+        const { channel, mentions } = msg.value.content;
+
+        if (channel) {
+          const withoutHashtag = withoutLeadingHashtag(channel);
+          const lowercaseWithoutHashtag = withoutHashtag.toLocaleLowerCase();
+
+          // Since the messages received are descending,
+          // we don't want to update the value for
+          // associated key if it already exists
+          // because we want the keep the most recent
+          // variation of the hashtag (accounts for casing)
+          if (!result.has(lowercaseWithoutHashtag)) {
+            result.set(lowercaseWithoutHashtag, withoutHashtag);
+          }
+        } else if (Array.isArray(mentions)) {
+          for (const mention of mentions) {
+            const withoutHashtag = withoutLeadingHashtag(mention.link);
+            const lowercaseWithoutHashtag = withoutHashtag.toLocaleLowerCase();
+
+            // Since the messages received are descending,
+            // we don't want to update the value for
+            // associated key if it already exists
+            // because we want the keep the most recent
+            // variation of the hashtag (accounts for casing)
+            if (!result.has(lowercaseWithoutHashtag)) {
+              result.set(lowercaseWithoutHashtag, withoutHashtag);
+            }
+
+            if (result.size === opts.limit) break;
+          }
+        }
+      }),
+      // Keep taking values until the result size === limit
+      pull.take(() => result.size < opts.limit),
+      pull.onEnd(() => {
+        cb(null, Array.from(preserveCase ? result.values() : result.keys()));
+      }),
+    );
   };
 
   @muxrpc('source')

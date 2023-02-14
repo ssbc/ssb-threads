@@ -60,3 +60,8 @@ export type HashtagsMatchingOpts = {
   query: string;
   limit?: number;
 };
+
+export type RecentHashtagsOpts = {
+  limit: number;
+  preserveCase?: boolean;
+};
