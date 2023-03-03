@@ -607,20 +607,24 @@ class threads {
             result.set(lowercaseWithoutHashtag, withoutHashtag);
           }
         } else if (Array.isArray(mentions)) {
-          for (const mention of mentions) {
-            const withoutHashtag = withoutLeadingHashtag(mention.link);
-            const lowercaseWithoutHashtag = withoutHashtag.toLocaleLowerCase();
+          for (const { link } of mentions) {
+            // msg.value.content.mentions[].link SHOULD have `#`
+            if (link && typeof link === 'string' && link.startsWith('#')) {
+              const withoutHashtag = withoutLeadingHashtag(link);
+              const lowercaseWithoutHashtag =
+                withoutHashtag.toLocaleLowerCase();
 
-            // Since the messages received are descending,
-            // we don't want to update the value for
-            // associated key if it already exists
-            // because we want the keep the most recent
-            // variation of the hashtag (accounts for casing)
-            if (!result.has(lowercaseWithoutHashtag)) {
-              result.set(lowercaseWithoutHashtag, withoutHashtag);
+              // Since the messages received are descending,
+              // we don't want to update the value for
+              // associated key if it already exists
+              // because we want the keep the most recent
+              // variation of the hashtag (accounts for casing)
+              if (!result.has(lowercaseWithoutHashtag)) {
+                result.set(lowercaseWithoutHashtag, withoutHashtag);
+              }
+
+              if (result.size === opts.limit) break;
             }
-
-            if (result.size === opts.limit) break;
           }
         }
       }),

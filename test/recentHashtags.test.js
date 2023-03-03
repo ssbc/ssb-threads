@@ -309,6 +309,55 @@ test('threads.recentHashtags handles messages with many mentions links', (t) => 
   );
 });
 
+test('threads.recentHashtags only looks into hashtags in mentions', (t) => {
+  const ssb = Testbot({ keys: andrewKeys });
+
+  pull(
+    pullAsync((cb) => {
+      ssb.db.create(
+        {
+          keys: andrewKeys,
+          content: {
+            type: 'post',
+            text: 'I like #wombats and #beavers, here is a picture',
+            mentions: [
+              { link: '#wombats' },
+              { link: '#beavers' },
+              { link: '&WWw4tQJ6ZrM7o3gA8lOEAcO4zmyqXqb/3bmIKTLQepo=.sha256' },
+            ],
+          },
+        },
+        wait(cb, 100),
+      );
+    }),
+    pull.asyncMap((_, cb) => {
+      ssb.db.create(
+        {
+          keys: andrewKeys,
+          content: {
+            type: 'post',
+            text: '#p2p is cool',
+            mentions: [{ link: '#p2p' }],
+          },
+        },
+        wait(cb, 100),
+      );
+    }),
+    pull.drain(null, (err) => {
+      t.error(err);
+
+      ssb.threads.recentHashtags(
+        { limit: 10, preserveCase: true },
+        (err2, hashtags) => {
+          t.error(err2);
+          t.deepEquals(hashtags, ['p2p', 'wombats', 'beavers']);
+          ssb.close(t.end);
+        },
+      );
+    }),
+  );
+});
+
 test('threads.recentHashtags returns most recently seen variation when preserveCase opt is true', (t) => {
   const ssb = Testbot({ keys: andrewKeys });
 
