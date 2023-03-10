@@ -145,13 +145,15 @@ Returns a ("live") pull stream that emits the message key (string) for thread ro
 
 ### `ssb.threads.profile(opts)`
 
-Returns a pull stream that emits thread objects of public messages initiated by a certain profile `id`.
+Returns a pull stream that emits thread objects of public messages in which a certain profile `id`
+participated in.
 
 * `opts.id`: FeedId of some SSB user.
 * `opts.reverse`: boolean., default `true`. `false` means threads will be delivered from oldest to most recent, `true` means they will be delivered from most recent to oldest.
 * `opts.threadMaxSize`: optional number (default: Infinity). Dictates the maximum amount of messages in each returned thread object. Serves for previewing threads, particularly long ones.
 * `opts.allowlist`: optional array of strings. Dictates which messages **types** to allow as root messages, while forbidding other types.
 * `opts.blocklist`: optional array of strings. Dictates which messages **types** to forbid as root messages, while allowing other types.
+* `opts.initiatedOnly`: optional boolean (default `false`), where `true` means only threads which `opts.id` is the profile that started that thread will be emitted, `false` means any thread in which the profile participated will be emitted.
 
 ### `ssb.threads.profileSummary(opts)`
 

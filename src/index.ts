@@ -34,6 +34,7 @@ const {
   batch,
   isPrivate,
   isPublic,
+  isRoot,
   hasRoot,
   hasFork,
   toPullStream,
@@ -692,10 +693,16 @@ class threads {
     const threadMaxSize = opts.threadMaxSize ?? Infinity;
     const filterOperator = makeFilterOperator(opts);
     const passesFilter = makePassesFilter(opts);
+    const initiatedOnly = opts.initiatedOnly ?? false;
 
     return pull(
       this.ssb.db.query(
-        where(and(author(id), isPublic(), filterOperator)),
+        where(and(
+          author(id),
+          isPublic(),
+          initiatedOnly ? isRoot() : null,
+          filterOperator
+        )),
         needsDescending ? descending() : null,
         batch(BATCH_SIZE),
         toPullStream(),

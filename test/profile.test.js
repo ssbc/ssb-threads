@@ -7,12 +7,15 @@ const wait = require('./wait');
 
 const lucyKeys = ssbKeys.generate(null, 'lucy');
 const maryKeys = ssbKeys.generate(null, 'mary');
+const noraKeys = ssbKeys.generate(null, 'nora');
 
 test('threads.profile gives threads for lucy not mary', (t) => {
   const ssb = Testbot({ keys: lucyKeys });
 
-  let msg1;
   pull(
+    // ✓ Thread
+    //   - started: Lucy
+    //   - replied: Lucy
     pullAsync((cb) => {
       ssb.db.create(
         {
@@ -22,8 +25,19 @@ test('threads.profile gives threads for lucy not mary', (t) => {
         wait(cb),
       );
     }),
-    pull.asyncMap((msg, cb) => {
-      msg1 = msg;
+    pull.asyncMap((lucyMsg, cb) => {
+      ssb.db.create(
+        {
+          keys: lucyKeys,
+          content: { type: 'post', text: 'Reply from lucy (1)', root: lucyMsg.key },
+        },
+        wait(cb),
+      );
+    }),
+    // ✓ Thread
+    //   - started: Mary
+    //   - replied: Lucy
+    pull.asyncMap((_, cb) => {
       ssb.db.create(
         {
           keys: maryKeys,
@@ -32,11 +46,23 @@ test('threads.profile gives threads for lucy not mary', (t) => {
         wait(cb),
       );
     }),
-    pull.asyncMap((_, cb) => {
+    pull.asyncMap((maryMsg, cb) => {
       ssb.db.create(
         {
           keys: lucyKeys,
-          content: { type: 'post', text: 'Reply from lucy', root: msg1.key },
+          content: { type: 'post', text: 'Reply from lucy (2)', root: maryMsg.key },
+        },
+        wait(cb),
+      );
+    }),
+    // ✗ Thread
+    //   - started: Nora
+    //   - replied: null
+    pull.asyncMap((maryMsg, cb) => {
+      ssb.db.create(
+        {
+          keys: noraKeys,
+          content: { type: 'post', text: 'Root from nora' },
         },
         wait(cb),
       );
@@ -46,20 +72,54 @@ test('threads.profile gives threads for lucy not mary', (t) => {
 
     pull.collect((err, threads) => {
       t.error(err);
-      t.equals(threads.length, 1, 'only one thread');
-      const thread = threads[0];
-      t.equals(thread.full, true, 'thread comes back full');
-      t.equals(thread.messages.length, 2, 'thread has 2 messages');
+      t.equals(threads.length, 2, 'two threads');
 
-      const msgs = thread.messages;
-      const rootKey = msgs[0].key;
-      t.equals(msgs[0].value.content.root, undefined, '1st message is root');
-      t.equals(msgs[0].value.content.text, 'Root from lucy');
+      // Mary's thred
+      t.equals(threads[0].full, true, 'thread comes back full');
+      t.equals(threads[0].messages.length, 2, 'thread has 2 messages');
 
-      t.equals(msgs[1].value.content.root, rootKey, '2nd message is not root');
-      t.equals(msgs[1].value.content.text, 'Reply from lucy');
+      t.deepEquals(
+        threads[0].messages.map(m => m.value.content),
+        [
+          { type: 'post', text: 'Root from mary' },
+          { type: 'post', text: 'Reply from lucy (2)', root: threads[0].messages[0].key },
+        ]
+      )
+      
+      // Lucy's thread
+      t.equals(threads[1].full, true, 'thread comes back full');
+      t.equals(threads[1].messages.length, 2, 'thread has 2 messages');
 
-      ssb.close(t.end);
+      t.deepEquals(
+        threads[1].messages.map(m => m.value.content),
+        [
+          { type: 'post', text: 'Root from lucy' },
+          { type: 'post', text: 'Reply from lucy (1)', root: threads[1].messages[0].key },
+        ]
+      )
+
+      t.comment('> opts.initiatedOnly') 
+      pull(
+        ssb.threads.profile({ id: lucyKeys.id, initiatedOnly: true }),
+        pull.collect((err, threads) => {
+          t.error(err);
+          t.equals(threads.length, 1, '1 thread');
+
+          // Lucy's thread
+          t.equals(threads[0].full, true, 'thread comes back full');
+          t.equals(threads[0].messages.length, 2, 'thread has 2 messages');
+
+          t.deepEquals(
+            threads[0].messages.map(m => m.value.content),
+            [
+              { type: 'post', text: 'Root from lucy' },
+              { type: 'post', text: 'Reply from lucy (1)', root: threads[0].messages[0].key },
+            ]
+          )
+
+          ssb.close(t.end);
+        })
+      )
     }),
   );
 });
