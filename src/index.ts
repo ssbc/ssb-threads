@@ -562,14 +562,16 @@ class threads {
     opts: HashtagsMatchingOpts,
     cb: CB<Array<[string, number]>>,
   ) => {
-    if (opts.query.length === 0)
+    if (typeof opts.query !== 'string' || opts.query.length === 0)
       return cb(new Error('opts.query must be non-empty string'));
     if (opts.limit && opts.limit <= 0)
       return cb(new Error('opts.limit must be number greater than 0'));
 
+    const query = opts.query.toLocaleLowerCase();
+    const limit = opts.limit || 10;
     this.ssb.db.onDrain('hashtags', () => {
       const hashtagsPlugin: HashtagsPlugin = this.ssb.db.getIndex('hashtags');
-      hashtagsPlugin.getMatchingHashtags(opts.query, opts.limit || 10, cb);
+      hashtagsPlugin.getMatchingHashtags(query, limit, cb);
     });
   };
 

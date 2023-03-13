@@ -168,6 +168,48 @@ test('threads.hashtagsMatching filters out lexigraphically close (but non-matchi
   );
 });
 
+test('threads.hashtagsMatching is case insensitive', (t) => {
+  const ssb = Testbot({ keys: andrewKeys });
+
+  pull(
+    pullAsync((cb) => {
+      ssb.db.create(
+        {
+          keys: andrewKeys,
+          content: {
+            type: 'post',
+            text: 'p2p',
+            channel: 'p2p',
+          },
+        },
+        wait(cb, 100),
+      );
+    }),
+    pull.asyncMap((_, cb) => {
+      ssb.db.create(
+        {
+          keys: andrewKeys,
+          content: {
+            type: 'post',
+            text: '#p4p',
+            mentions: [{ link: '#p4p' }],
+          },
+        },
+        wait(cb, 100),
+      );
+    }),
+    pull.drain(null, (err) => {
+      t.error(err);
+
+      ssb.threads.hashtagsMatching({ query: 'P' }, (err2, matches) => {
+        t.error(err2);
+        t.deepEquals(matches, [['p2p', 1], ['p4p', 1]]);
+        ssb.close(t.end);
+      });
+    }),
+  );
+});
+
 test('threads.hashtagsMatching respects default limit of 10 results', (t) => {
   const ssb = Testbot({ keys: andrewKeys });
 
